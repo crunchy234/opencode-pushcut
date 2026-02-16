@@ -9,7 +9,7 @@ const DEFAULT_TAGS: Record<NotificationEvent, string> = {
   "session.idle": "hourglass_done",
   "session.error": "warning",
   "permission.asked": "lock",
-} as const;
+};
 
 export function createNtfyBackend(
   config: NtfyBackendConfig
