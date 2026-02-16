@@ -31,19 +31,33 @@
       "default": "default",
       "description": "Global notification priority."
     },
-    "iconMode": {
-      "type": "string",
-      "enum": ["light", "dark"],
-      "default": "dark",
-      "description": "Whether the target device uses light or dark mode. Determines which icon variant is used."
-    },
-    "iconLight": {
-      "type": "string",
-      "description": "Custom icon URL override for light mode. Must point to a JPEG or PNG image."
-    },
-    "iconDark": {
-      "type": "string",
-      "description": "Custom icon URL override for dark mode. Must point to a JPEG or PNG image."
+    "icon": {
+      "type": "object",
+      "description": "Icon configuration object.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["light", "dark"],
+          "default": "dark",
+          "description": "Whether the target device uses light or dark mode. Determines which icon variant is used."
+        },
+        "variant": {
+          "type": "object",
+          "description": "Custom icon URL overrides per mode variant.",
+          "additionalProperties": false,
+          "properties": {
+            "light": {
+              "type": "string",
+              "description": "Custom icon URL override for light mode. Must point to a JPEG or PNG image."
+            },
+            "dark": {
+              "type": "string",
+              "description": "Custom icon URL override for dark mode. Must point to a JPEG or PNG image."
+            }
+          }
+        }
+      }
     },
     "fetchTimeout": {
       "type": "string",

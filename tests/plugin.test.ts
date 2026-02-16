@@ -367,8 +367,8 @@ describe("plugin", () => {
     expect(iconHeader).toContain("raw.githubusercontent.com");
   });
 
-  it("should include X-Icon header with light icon URL when iconMode is light", async () => {
-    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com", iconMode: "light" });
+  it("should include X-Icon header with light icon URL when icon.mode is light", async () => {
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com", icon: { mode: "light" } });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
     const { plugin } = await import("../src/index.js");
@@ -524,11 +524,11 @@ describe("plugin", () => {
     );
   });
 
-  it("should use custom icon URL from iconDark config when mode is dark", async () => {
+  it("should use custom icon URL from icon.variant.dark config when mode is dark", async () => {
     await mockConfigFile({
       topic: "test-topic",
       server: "https://ntfy.example.com",
-      iconDark: "https://example.com/custom-dark.png",
+      icon: { variant: { dark: "https://example.com/custom-dark.png" } },
     });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 

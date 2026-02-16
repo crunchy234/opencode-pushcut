@@ -100,13 +100,13 @@ export function loadConfig(): NtfyConfig | undefined {
     );
   }
 
-  // Optional: iconMode
-  const iconModeRaw = typeof parsed.iconMode === "string" ? parsed.iconMode : "dark";
+  // Optional: icon object
+  const iconObj = isRecord(parsed.icon) ? parsed.icon : {};
+  const iconModeRaw = typeof iconObj.mode === "string" ? iconObj.mode : "dark";
   const iconMode = (iconModeRaw === "light" || iconModeRaw === "dark") ? iconModeRaw : "dark";
-
-  // Optional: iconLight, iconDark
-  const iconLight = typeof parsed.iconLight === "string" ? parsed.iconLight : undefined;
-  const iconDark = typeof parsed.iconDark === "string" ? parsed.iconDark : undefined;
+  const variantObj = isRecord(iconObj.variant) ? iconObj.variant : {};
+  const iconLight = typeof variantObj.light === "string" ? variantObj.light : undefined;
+  const iconDark = typeof variantObj.dark === "string" ? variantObj.dark : undefined;
 
   const iconUrl = resolveIconUrl(iconMode, iconLight, iconDark);
 

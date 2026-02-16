@@ -145,8 +145,8 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should use light mode icon URL when iconMode is light", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "light" });
+  it("should use light mode icon URL when icon.mode is light", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "light" } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe(
@@ -154,8 +154,8 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should use dark mode icon URL when iconMode is dark", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "dark" });
+  it("should use dark mode icon URL when icon.mode is dark", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "dark" } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe(
@@ -163,8 +163,8 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should default to dark mode when iconMode is an invalid value", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "neon" });
+  it("should default to dark mode when icon.mode is an invalid value", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "neon" } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe(
@@ -172,22 +172,22 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should use iconDark override when mode is dark", async () => {
-    await mockConfigFile({ topic: "test", iconDark: "https://example.com/my-dark-icon.png" });
+  it("should use icon.variant.dark override when mode is dark", async () => {
+    await mockConfigFile({ topic: "test", icon: { variant: { dark: "https://example.com/my-dark-icon.png" } } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe("https://example.com/my-dark-icon.png");
   });
 
-  it("should use iconLight override when mode is light", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "light", iconLight: "https://example.com/my-light-icon.png" });
+  it("should use icon.variant.light override when mode is light", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "light", variant: { light: "https://example.com/my-light-icon.png" } } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe("https://example.com/my-light-icon.png");
   });
 
-  it("should ignore iconLight when mode is dark", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "dark", iconLight: "https://example.com/my-light-icon.png" });
+  it("should ignore icon.variant.light when mode is dark", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "dark", variant: { light: "https://example.com/my-light-icon.png" } } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe(
@@ -195,8 +195,8 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should ignore iconDark when mode is light", async () => {
-    await mockConfigFile({ topic: "test", iconMode: "light", iconDark: "https://example.com/my-dark-icon.png" });
+  it("should ignore icon.variant.dark when mode is light", async () => {
+    await mockConfigFile({ topic: "test", icon: { mode: "light", variant: { dark: "https://example.com/my-dark-icon.png" } } });
     const { loadConfig } = await import("../src/config.js");
     const config = loadConfig();
     expect(config!.iconUrl).toBe(
@@ -269,9 +269,7 @@ describe("JSON Schema", () => {
     expect(properties).toContain("server");
     expect(properties).toContain("token");
     expect(properties).toContain("priority");
-    expect(properties).toContain("iconMode");
-    expect(properties).toContain("iconLight");
-    expect(properties).toContain("iconDark");
+    expect(properties).toContain("icon");
     expect(properties).toContain("fetchTimeout");
     expect(properties).toContain("events");
   });
