@@ -2,106 +2,150 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/main/opencode-ntfy.schema.json",
   "title": "opencode-ntfy.sh Configuration",
-  "description": "Configuration file for the opencode-ntfy.sh plugin, which sends push notifications via ntfy.sh during OpenCode sessions.",
+  "description": "Configuration file for the opencode-ntfy.sh plugin, which sends push notifications via ntfy.sh during OpenCode sessions. Located at ~/.config/opencode/notification-ntfy.json.",
   "type": "object",
-  "required": ["topic"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Path or URL to the JSON Schema for editor validation and autocompletion."
     },
-    "topic": {
-      "type": "string",
-      "minLength": 1,
-      "description": "The ntfy.sh topic to publish notifications to."
-    },
-    "server": {
-      "type": "string",
-      "default": "https://ntfy.sh",
-      "description": "The ntfy.sh server URL."
-    },
-    "token": {
-      "type": "string",
-      "description": "Bearer token for authentication with the ntfy.sh server."
-    },
-    "priority": {
-      "type": "string",
-      "enum": ["min", "low", "default", "high", "max"],
-      "default": "default",
-      "description": "Global notification priority."
-    },
-    "icon": {
-      "type": "object",
-      "description": "Icon configuration object.",
-      "additionalProperties": false,
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": ["light", "dark"],
-          "default": "dark",
-          "description": "Whether the target device uses light or dark mode. Determines which icon variant is used."
-        },
-        "variant": {
-          "type": "object",
-          "description": "Custom icon URL overrides per mode variant.",
-          "additionalProperties": false,
-          "properties": {
-            "light": {
-              "type": "string",
-              "description": "Custom icon URL override for light mode. Must point to a JPEG or PNG image."
-            },
-            "dark": {
-              "type": "string",
-              "description": "Custom icon URL override for dark mode. Must point to a JPEG or PNG image."
-            }
-          }
-        }
-      }
-    },
-    "fetchTimeout": {
-      "type": "string",
-      "pattern": "^P",
-      "description": "ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., 'PT10S' for 10 seconds)."
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Global kill switch for all notifications."
     },
     "events": {
       "type": "object",
-      "description": "Per-event custom command overrides for notification fields.",
+      "description": "Per-event enable/disable toggles.",
       "additionalProperties": false,
       "properties": {
         "session.idle": {
-          "$ref": "#/$defs/eventCommands"
+          "$ref": "#/$defs/eventToggle"
         },
         "session.error": {
-          "$ref": "#/$defs/eventCommands"
+          "$ref": "#/$defs/eventToggle"
         },
         "permission.asked": {
-          "$ref": "#/$defs/eventCommands"
+          "$ref": "#/$defs/eventToggle"
+        }
+      }
+    },
+    "templates": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "description": "Per-event shell command templates for customizing notification content.",
+          "additionalProperties": false,
+          "properties": {
+            "session.idle": {
+              "$ref": "#/$defs/templateConfig"
+            },
+            "session.error": {
+              "$ref": "#/$defs/templateConfig"
+            },
+            "permission.asked": {
+              "$ref": "#/$defs/templateConfig"
+            }
+          }
+        }
+      ],
+      "description": "Per-event shell command templates, or null for defaults."
+    },
+    "backend": {
+      "type": "object",
+      "description": "ntfy.sh-specific backend configuration.",
+      "required": ["topic"],
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The ntfy.sh topic to publish notifications to."
+        },
+        "server": {
+          "type": "string",
+          "default": "https://ntfy.sh",
+          "description": "The ntfy.sh server URL."
+        },
+        "token": {
+          "type": "string",
+          "description": "Bearer token for authentication with the ntfy.sh server."
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["min", "low", "default", "high", "max"],
+          "default": "default",
+          "description": "Global notification priority."
+        },
+        "icon": {
+          "type": "object",
+          "description": "Icon configuration object.",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["light", "dark"],
+              "default": "dark",
+              "description": "Whether the target device uses light or dark mode. Determines which icon variant is used."
+            },
+            "variant": {
+              "type": "object",
+              "description": "Custom icon URL overrides per mode variant.",
+              "additionalProperties": false,
+              "properties": {
+                "light": {
+                  "type": "string",
+                  "description": "Custom icon URL override for light mode. Must point to a JPEG or PNG image."
+                },
+                "dark": {
+                  "type": "string",
+                  "description": "Custom icon URL override for dark mode. Must point to a JPEG or PNG image."
+                }
+              }
+            }
+          }
+        },
+        "fetchTimeout": {
+          "type": "string",
+          "pattern": "^P",
+          "description": "ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., 'PT10S' for 10 seconds)."
         }
       }
     }
   },
   "$defs": {
-    "eventCommands": {
+    "eventToggle": {
       "type": "object",
-      "description": "Custom shell commands whose stdout is used for notification fields.",
+      "description": "Per-event enable/disable toggle.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this event type triggers notifications."
+        }
+      }
+    },
+    "templateConfig": {
+      "type": "object",
+      "description": "Shell command templates for customizing notification content.",
       "additionalProperties": false,
       "properties": {
         "titleCmd": {
-          "type": "string",
-          "description": "Shell command whose stdout is used as the notification title."
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "Shell command whose stdout is used as the notification title, or null for default."
         },
         "messageCmd": {
-          "type": "string",
-          "description": "Shell command whose stdout is used as the notification message body."
-        },
-        "tagsCmd": {
-          "type": "string",
-          "description": "Shell command whose stdout is used as the notification tags."
-        },
-        "priorityCmd": {
-          "type": "string",
-          "description": "Shell command whose stdout is used as the notification priority."
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "Shell command whose stdout is used as the notification message body, or null for default."
         }
       }
     }

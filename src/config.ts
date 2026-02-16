@@ -1,61 +1,30 @@
-import {
-  existsSync as nodeExistsSync,
-  readFileSync as nodeReadFileSync,
-} from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir as nodeHomedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { parse, toSeconds } from "iso8601-duration";
 
-export interface EventCommands {
-  titleCmd?: string;
-  messageCmd?: string;
-  tagsCmd?: string;
-  priorityCmd?: string;
-}
-
-export interface NtfyConfig {
+export interface NtfyBackendConfig {
   topic: string;
   server: string;
   token?: string;
   priority: string;
   iconUrl: string;
   fetchTimeout?: number;
-  events?: Record<string, EventCommands>;
-}
-
-export interface ConfigDeps {
-  homedir: () => string;
-  existsSync: (path: string) => boolean;
-  readConfigFile: (path: string) => string;
-}
-
-const defaultDeps: ConfigDeps = {
-  homedir: nodeHomedir,
-  existsSync: (path) => nodeExistsSync(path),
-  readConfigFile: (path) => nodeReadFileSync(path, "utf-8"),
-};
-
-function parseISO8601Duration(duration: string): number {
-  try {
-    const parsed = parse(duration);
-    return Math.round(toSeconds(parsed) * 1000);
-  } catch {
-    throw new Error(
-      `Invalid ISO 8601 duration: "${duration}". Expected format like PT30S, PT5M, PT1H30M15S.`
-    );
-  }
 }
 
 const VALID_PRIORITIES = ["min", "low", "default", "high", "max"] as const;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
-  nodeReadFileSync(join(__dirname, "..", "package.json"), "utf-8")
+  readFileSync(join(__dirname, "..", "package.json"), "utf-8")
 );
 const PACKAGE_VERSION: string = pkg.version;
 
 const BASE_ICON_URL = `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${PACKAGE_VERSION}/assets`;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function resolveIconUrl(
   iconMode: string,
@@ -68,100 +37,62 @@ function resolveIconUrl(
   return `${BASE_ICON_URL}/opencode-icon-${mode}.png`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseJsonFile(
-  filePath: string,
-  readConfigFile: ConfigDeps["readConfigFile"]
-): unknown {
-  const raw = readConfigFile(filePath);
+function parseISO8601Duration(duration: string): number {
   try {
-    return JSON.parse(raw);
+    const parsed = parse(duration);
+    return Math.round(toSeconds(parsed) * 1000);
   } catch {
-    throw new Error(`Failed to parse config file ${filePath}: invalid JSON`);
+    throw new Error(
+      `Invalid ISO 8601 duration: "${duration}". Expected format like PT30S, PT5M, PT1H30M15S.`
+    );
   }
 }
 
-export function loadConfig(deps?: ConfigDeps): NtfyConfig | undefined {
-  const { homedir, existsSync, readConfigFile } = deps ?? defaultDeps;
-  const configPath = join(homedir(), ".config", "opencode", "opencode-ntfy.json");
-
-  if (!existsSync(configPath)) {
-    return undefined;
-  }
-
-  const parsed = parseJsonFile(configPath, readConfigFile);
-
-  if (!isRecord(parsed)) {
-    throw new Error(`Config file ${configPath} must contain a JSON object`);
-  }
-
+export function parseNtfyBackendConfig(
+  raw: Record<string, unknown>
+): NtfyBackendConfig {
   // Required: topic
-  if (typeof parsed.topic !== "string" || parsed.topic.length === 0) {
-    throw new Error("Config file must contain a non-empty 'topic' string");
+  if (typeof raw.topic !== "string" || raw.topic.length === 0) {
+    throw new Error("Backend config must contain a non-empty 'topic' string");
   }
-  const topic = parsed.topic;
+  const topic = raw.topic;
 
   // Optional: server
-  const server = typeof parsed.server === "string" ? parsed.server : "https://ntfy.sh";
+  const server =
+    typeof raw.server === "string" ? raw.server : "https://ntfy.sh";
 
   // Optional: token
-  const token = typeof parsed.token === "string" ? parsed.token : undefined;
+  const token = typeof raw.token === "string" ? raw.token : undefined;
 
   // Optional: priority
-  const priority = typeof parsed.priority === "string" ? parsed.priority : "default";
+  const priority =
+    typeof raw.priority === "string" ? raw.priority : "default";
   if (!VALID_PRIORITIES.some((p) => p === priority)) {
     throw new Error(
-      `Config 'priority' must be one of: ${VALID_PRIORITIES.join(", ")}`
+      `Backend config 'priority' must be one of: ${VALID_PRIORITIES.join(", ")}`
     );
   }
 
-  // Optional: icon object
-  const iconObj = isRecord(parsed.icon) ? parsed.icon : {};
-  const iconModeRaw = typeof iconObj.mode === "string" ? iconObj.mode : "dark";
-  const iconMode = (iconModeRaw === "light" || iconModeRaw === "dark") ? iconModeRaw : "dark";
+  // Optional: icon object { mode, variant: { light, dark } }
+  const iconObj = isRecord(raw.icon) ? raw.icon : {};
+  const iconModeRaw =
+    typeof iconObj.mode === "string" ? iconObj.mode : "dark";
+  const iconMode =
+    iconModeRaw === "light" || iconModeRaw === "dark"
+      ? iconModeRaw
+      : "dark";
   const variantObj = isRecord(iconObj.variant) ? iconObj.variant : {};
-  const iconLight = typeof variantObj.light === "string" ? variantObj.light : undefined;
-  const iconDark = typeof variantObj.dark === "string" ? variantObj.dark : undefined;
-
+  const iconLight =
+    typeof variantObj.light === "string" ? variantObj.light : undefined;
+  const iconDark =
+    typeof variantObj.dark === "string" ? variantObj.dark : undefined;
   const iconUrl = resolveIconUrl(iconMode, iconLight, iconDark);
 
-  // Optional: fetchTimeout
-  const fetchTimeout = typeof parsed.fetchTimeout === "string"
-    ? parseISO8601Duration(parsed.fetchTimeout)
-    : undefined;
+  // Optional: fetchTimeout (ISO 8601 duration -> ms)
+  const fetchTimeout =
+    typeof raw.fetchTimeout === "string"
+      ? parseISO8601Duration(raw.fetchTimeout)
+      : undefined;
 
-  // Optional: events
-  const events = isRecord(parsed.events)
-    ? parseEvents(parsed.events)
-    : undefined;
-
-  return {
-    topic,
-    server,
-    token,
-    priority,
-    iconUrl,
-    fetchTimeout,
-    events,
-  };
-}
-
-function parseEvents(
-  eventsObj: Record<string, unknown>
-): Record<string, EventCommands> {
-  const result: Record<string, EventCommands> = {};
-  for (const key of Object.keys(eventsObj)) {
-    const value = eventsObj[key];
-    if (!isRecord(value)) continue;
-    const commands: EventCommands = {};
-    if (typeof value.titleCmd === "string") commands.titleCmd = value.titleCmd;
-    if (typeof value.messageCmd === "string") commands.messageCmd = value.messageCmd;
-    if (typeof value.tagsCmd === "string") commands.tagsCmd = value.tagsCmd;
-    if (typeof value.priorityCmd === "string") commands.priorityCmd = value.priorityCmd;
-    result[key] = commands;
-  }
-  return result;
+  return { topic, server, token, priority, iconUrl, fetchTimeout };
 }

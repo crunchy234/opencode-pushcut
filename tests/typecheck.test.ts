@@ -6,14 +6,14 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dirname, "..");
 
 describe("type conformance", () => {
-  it("should type-check that the plugin export satisfies the @opencode-ai/plugin Plugin type", { timeout: 30000 }, () => {
+  it("should type-check that the default export satisfies the @opencode-ai/plugin Plugin type", { timeout: 30000 }, () => {
     const checkFile = join(ROOT, "src", "_typecheck_plugin.ts");
 
     writeFileSync(
       checkFile,
       `
 import type { Plugin } from "@opencode-ai/plugin";
-import { plugin } from "./index.js";
+import plugin from "./index.js";
 
 // This assignment will fail at compile time if plugin does not match the Plugin type.
 const _check: Plugin = plugin;
@@ -57,23 +57,25 @@ void _check;
     }
   });
 
-  it("should type-check that sendNotification does not accept a fetchFn parameter", { timeout: 30000 }, () => {
-    const checkFile = join(ROOT, "src", "_typecheck_notify.ts");
+  it("should type-check that createNtfyBackend returns NotificationBackend", { timeout: 30000 }, () => {
+    const checkFile = join(ROOT, "src", "_typecheck_backend.ts");
 
     writeFileSync(
       checkFile,
       `
-import { sendNotification } from "./notify.js";
-import type { NtfyConfig } from "./config.js";
+import type { NotificationBackend } from "opencode-notification-sdk";
+import { createNtfyBackend } from "./backend.js";
+import type { NtfyBackendConfig } from "./config.js";
 
-const config: NtfyConfig = { topic: "t", server: "s", priority: "default", iconUrl: "https://example.com/icon.png" };
-const payload = { title: "t", message: "m", tags: "tag" };
+const config: NtfyBackendConfig = {
+  topic: "t",
+  server: "s",
+  priority: "default",
+  iconUrl: "https://example.com/icon.png",
+};
 
-// sendNotification should only accept 2 arguments (config, payload).
-// If it accepts a 3rd argument, this type check should fail.
-type Params = Parameters<typeof sendNotification>;
-type AssertExactlyTwo = Params extends [unknown, unknown] ? true : false;
-const _check: AssertExactlyTwo = true;
+// createNtfyBackend should return a NotificationBackend
+const _check: NotificationBackend = createNtfyBackend(config);
 void _check;
 `
     );

@@ -1,10 +1,10 @@
 # opencode-ntfy.sh
 
-You are building an OpenCode plugin that sends push notifications via ntfy.sh.
+You are building an OpenCode notification backend plugin for ntfy.sh, built on the `opencode-notification-sdk`.
 
 ## Goal
 
-Build a TypeScript OpenCode plugin (`opencode-ntfy.sh`) that sends push notifications to a user's phone or desktop via the ntfy.sh service when key events occur during an OpenCode session.
+Build a TypeScript OpenCode plugin (`opencode-ntfy.sh`) that delivers push notifications to a user's phone or desktop via the ntfy.sh service. This plugin is a **notification backend** for the [`opencode-notification-sdk`](https://www.npmjs.com/package/opencode-notification-sdk). The SDK handles all common notification logic (event routing, subagent suppression, shell command template resolution, default content). This project is responsible only for the ntfy.sh-specific concerns: formatting and sending the HTTP POST request, validating ntfy-specific configuration, and resolving the notification icon URL.
 
 ## Instructions
 
@@ -28,174 +28,120 @@ If there is a discrepancy between PLAN.md and this prompt, always update PLAN.md
 
 ## Specifications
 
-### Plugin Behavior
+### Relationship to the SDK
 
-- The plugin must be installable via npm or by placing it in `.opencode/plugins/`.
-- The plugin must send ntfy.sh notifications on the following events via the `event` hook:
-  - `session.idle` -- when the agent finishes and is waiting for input
-  - `session.error` -- when a session encounters an error
-  - `permission.asked` -- when the agent needs permission to perform an action
-- **Subagent suppression:** `session.idle` and `session.error` events from subagent (child) sessions must be silently suppressed. When a subagent completes or errors, control returns to the parent agent, so there is nothing for the user to act on. The plugin must use the `client` from the plugin input to call `client.session.get()` with the session ID from the event's properties to determine whether the session has a `parentID`. If it does, the event is from a subagent and no notification is sent. If the session lookup fails (e.g., network error, missing session), the plugin must fall through and send the notification anyway to avoid silently dropping notifications due to transient failures.
-- Default notifications must include:
-  - The event type
-  - The project name (derived from the working directory)
-  - A timestamp
-  - For errors: the error message
-  - For permissions: the permission type and patterns
-- The plugin must be configurable via a JSON configuration file located at `~/.config/opencode/opencode-ntfy.json`, following the pattern established by plugins like `opencode-notifier`. The configuration file has an associated JSON Schema (see [Configuration File](#configuration-file) below for full details).
-  - If the config file does not exist, the plugin is disabled (returns empty hooks).
-  - If the config file exists but cannot be parsed, the plugin must throw an error.
-  - The config file must contain at minimum a `topic` field.
-  - All other fields are optional and have sensible defaults.
+This plugin depends on `opencode-notification-sdk` as a runtime dependency. The SDK provides:
 
-### Configuration File
+- **Event routing** -- classifying raw OpenCode events into notification types (`session.idle`, `session.error`, `permission.asked`)
+- **Subagent suppression** -- silently suppressing notifications from sub-agent (child) sessions for `session.idle` and `session.error` events
+- **Shell command templates** -- user-customizable notification titles and messages via shell commands with `{var_name}` substitution
+- **Default notification content** -- sensible default titles and messages for every event type
+- **Configuration loading** -- reading and parsing the config file, handling the `enabled`, `events`, and `templates` sections
+- **Plugin factory** -- `createNotificationPlugin()` wires everything together and returns a valid OpenCode `Plugin`
 
-The plugin is configured via a JSON file at `~/.config/opencode/opencode-ntfy.json`. The configuration file must have an associated JSON Schema bundled in the repository at `opencode-ntfy.schema.json`. This schema file must be published with the npm package so that users can reference it in their config file for editor autocompletion and validation.
+This project implements the `NotificationBackend` interface from the SDK, which requires a single method:
 
-Users can reference the schema in their config file using the `$schema` property:
-
-```json
-{
-  "$schema": "node_modules/opencode-ntfy.sh/opencode-ntfy.schema.json",
-  "topic": "my-topic"
+```typescript
+interface NotificationBackend {
+  send(context: NotificationContext): Promise<void>;
 }
 ```
 
-#### Configuration Properties
+The SDK calls `send()` only after all filtering (event classification, enabled checks, subagent suppression) and content resolution (shell command templates or defaults) are complete. The `NotificationContext` passed to `send()` contains the resolved `event`, `title`, `message`, and `metadata`.
+
+### Plugin Behavior
+
+- The plugin must be installable via npm or by placing it in `.opencode/plugins/`.
+- The plugin uses `createNotificationPlugin()` from the SDK with `backendConfigKey: "ntfy"` to create the OpenCode plugin.
+- The SDK handles all event routing, subagent suppression, and content resolution. This plugin does not implement any of that logic.
+- The plugin's sole responsibility is delivering the notification via the ntfy.sh HTTP API when the SDK calls `backend.send()`.
+
+### Configuration File
+
+The plugin is configured via a JSON file at `~/.config/opencode/notification-ntfy.json`. The config file path is determined by the SDK based on the `backendConfigKey` of `"ntfy"`.
+
+The config file follows the SDK's configuration schema at the top level, with ntfy-specific settings under the `backend` key.
+
+#### Full Configuration Structure
 
 | Property | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `$schema` | `string` | No | -- | Path or URL to the JSON Schema for editor validation and autocompletion |
-| `topic` | `string` | **Yes** | -- | The ntfy.sh topic to publish to |
-| `server` | `string` | No | `"https://ntfy.sh"` | The ntfy.sh server URL |
-| `token` | `string` | No | -- | Bearer token for authentication |
-| `priority` | `string` | No | `"default"` | Global notification priority (`min`, `low`, `default`, `high`, `max`) |
-| `icon` | `object` | No | -- | Icon configuration object (see below) |
-| `icon.mode` | `string` | No | `"dark"` | Whether the target device uses `light` or `dark` mode |
-| `icon.variant` | `object` | No | -- | Custom icon URL overrides per mode variant |
-| `icon.variant.light` | `string` | No | -- | Custom icon URL override for light mode |
-| `icon.variant.dark` | `string` | No | -- | Custom icon URL override for dark mode |
-| `fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., `PT10S` for 10 seconds, `PT1M` for 1 minute). The duration is parsed using `parseISO8601Duration()` (which delegates to a third-party ISO 8601 duration library). When set, the `fetch` call in `sendNotification` uses an `AbortSignal.timeout()` to enforce the timeout. When not set, no timeout is applied (the request uses the default `fetch` behavior). |
-| `events` | `object` | No | -- | Per-event custom command overrides (see [Custom Notification Commands](#custom-notification-commands)) |
+| `enabled` | `boolean` | No | `true` | Global kill switch for all notifications (handled by SDK) |
+| `events` | `object` | No | (all enabled) | Per-event enable/disable toggles (handled by SDK) |
+| `events.<type>.enabled` | `boolean` | No | `true` | Whether this event type triggers notifications (handled by SDK) |
+| `templates` | `object \| null` | No | `null` | Per-event shell command templates (handled by SDK) |
+| `templates.<type>.titleCmd` | `string \| null` | No | `null` | Shell command to generate notification title (handled by SDK) |
+| `templates.<type>.messageCmd` | `string \| null` | No | `null` | Shell command to generate notification message (handled by SDK) |
+| `backend` | `object` | No | `{}` | ntfy.sh-specific configuration (see below) |
+
+#### Backend Configuration Properties
+
+The `backend` object contains all ntfy.sh-specific settings:
+
+| Property | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `backend.topic` | `string` | **Yes** | -- | The ntfy.sh topic to publish to |
+| `backend.server` | `string` | No | `"https://ntfy.sh"` | The ntfy.sh server URL |
+| `backend.token` | `string` | No | -- | Bearer token for authentication |
+| `backend.priority` | `string` | No | `"default"` | Notification priority (`min`, `low`, `default`, `high`, `max`) |
+| `backend.icon` | `object` | No | -- | Icon configuration object (see [Notification Icons](#notification-icons)) |
+| `backend.icon.mode` | `string` | No | `"dark"` | Whether the target device uses `light` or `dark` mode |
+| `backend.icon.variant` | `object` | No | -- | Custom icon URL overrides per mode variant |
+| `backend.icon.variant.light` | `string` | No | -- | Custom icon URL override for light mode |
+| `backend.icon.variant.dark` | `string` | No | -- | Custom icon URL override for dark mode |
+| `backend.fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout (e.g., `PT10S` for 10 seconds) |
 
 #### Example Configuration
 
 ```json
 {
-  "$schema": "node_modules/opencode-ntfy.sh/opencode-ntfy.schema.json",
-  "topic": "my-notifications",
-  "server": "https://ntfy.sh",
-  "priority": "default",
-  "icon": {
-    "mode": "dark"
-  },
-  "fetchTimeout": "PT10S",
+  "enabled": true,
   "events": {
+    "session.idle": { "enabled": true },
+    "session.error": { "enabled": true },
+    "permission.asked": { "enabled": true }
+  },
+  "templates": {
     "session.idle": {
-      "titleCmd": "printf \"%s\" \"Agent Idle\"",
-      "messageCmd": "printf \"%s\" \"The agent has finished and is waiting for input.\"",
-      "tagsCmd": "printf \"%s\" \"hourglass_done\"",
-      "priorityCmd": "printf \"%s\" \"default\""
+      "titleCmd": "echo 'Custom Idle Title'",
+      "messageCmd": null
     }
+  },
+  "backend": {
+    "topic": "my-notifications",
+    "server": "https://ntfy.sh",
+    "priority": "default",
+    "icon": {
+      "mode": "dark"
+    },
+    "fetchTimeout": "PT10S"
   }
 }
 ```
 
-#### Config Loading
+#### Backend Config Parsing
 
-The `loadConfig()` function in `src/config.ts` must:
+The `parseNtfyBackendConfig()` function in `src/config.ts` must:
 
-1. Construct the config file path via `join(homedir(), ".config", "opencode", "opencode-ntfy.json")` using Node.js `os.homedir()` and `path.join()`
-2. Check if the file exists -- if not, return `undefined` (plugin is disabled)
-3. Read the file with `readFileSync()` and parse with `JSON.parse()`
-4. Validate the parsed object against the expected schema (required fields, valid enum values, valid ISO 8601 duration for `fetchTimeout` where applicable)
-5. Throw an error if the file exists but contains invalid JSON or fails validation
-6. Return the typed `NtfyConfig` object with defaults applied for omitted optional fields
+1. Accept a `Record<string, unknown>` (the raw `backend` object from the SDK config)
+2. Validate that `topic` is a non-empty string; throw if missing or invalid
+3. Apply defaults for optional fields (`server`, `priority`, icon mode)
+4. Validate `priority` against the allowed enum values (`min`, `low`, `default`, `high`, `max`); throw if invalid
+5. Parse `fetchTimeout` from an ISO 8601 duration string to milliseconds using a third-party library; throw if the string is invalid
+6. Resolve the icon URL based on `icon.mode` and `icon.variant` overrides
+7. Return a typed `NtfyBackendConfig` object
 
 #### JSON Schema
 
 The JSON Schema file (`opencode-ntfy.schema.json`) must:
 
 - Be a valid JSON Schema (draft 2020-12 or later)
-- Define all configuration properties with their types, descriptions, defaults, and constraints
+- Define the full configuration structure including SDK-level properties (`enabled`, `events`, `templates`) and the `backend` object with all ntfy-specific properties
 - Use `enum` for fields with a fixed set of valid values (e.g., `priority`, `icon.mode`)
 - Use `pattern` for fields with specific formats where appropriate
-- Mark `topic` as required
-- Include `additionalProperties: false` at the top level to catch typos
-- Include `$schema` as an allowed property so users can reference the schema from within their config file
+- Mark `backend.topic` as required when `backend` is present
+- Include `additionalProperties: false` at appropriate levels to catch typos
 - Be included in the npm package `files` list in `package.json`
-
-### Custom Notification Commands
-
-Each notification field (title, message, tags, priority) can be customized per event by setting a shell command in the `events` section of the config file. The command's stdout (trimmed) is used as the field value. If the command is not set or fails, the hardcoded default is used silently.
-
-Commands are executed via the Bun `$` shell provided by the OpenCode plugin input. Before execution, template variables in the command string are substituted with their values. Unset variables are substituted with empty strings.
-
-#### Event Command Fields
-
-Per-event commands are specified in the `events` object of the config file, keyed by event type. Each event object supports the following optional fields:
-
-| Field | Description |
-|---|---|
-| `titleCmd` | Shell command whose stdout is used as the notification title |
-| `messageCmd` | Shell command whose stdout is used as the notification message body |
-| `tagsCmd` | Shell command whose stdout is used as the notification tags |
-| `priorityCmd` | Shell command whose stdout is used as the notification priority |
-
-The supported event keys are: `session.idle`, `session.error`, `permission.asked`.
-
-#### Template Variables
-
-| Variable | Available In | Description |
-|---|---|---|
-| `${event}` | All events | The event type string (e.g., `session.idle`) |
-| `${time}` | All events | ISO 8601 timestamp |
-| `${error}` | `session.error` only | The error message (empty string for other events) |
-| `${permission_type}` | `permission.asked` only | The permission type (empty string for other events) |
-| `${permission_patterns}` | `permission.asked` only | Comma-separated list of patterns (empty string for other events) |
-
-#### Default Values
-
-When a custom command field is not set in the config, the following POSIX-compliant commands are used as defaults to populate the notification title and message content. These commands intentionally omit a trailing newline.
-
-##### Title Defaults
-
-| Event | Default Command |
-|---|---|
-| `session.idle` | `printf "%s" "Agent Idle"` |
-| `session.error` | `printf "%s" "Agent Error"` |
-| `permission.asked` | `printf "%s" "Permission Asked"` |
-
-##### Message Content Defaults
-
-| Event | Default Command |
-|---|---|
-| `session.idle` | `printf "%s" "The agent has finished and is waiting for input."` |
-| `session.error` | `printf "%s" "An error has occurred. Check the session for details."` |
-| `permission.asked` | `printf "%s" "The agent needs permission to continue. Review and respond."` |
-
-##### Tag Defaults
-
-Each event type has a default tag used when no custom `tagsCmd` is set. These tags correspond to emoji shortcodes supported by ntfy.sh:
-
-| Event | Default Tag | Emoji |
-|---|---|---|
-| `session.idle` | `hourglass_done` | ⌛ |
-| `session.error` | `warning` | ⚠️ |
-| `permission.asked` | `lock` | 🔒 |
-
-The README must document these default tags alongside the default title and message values.
-
-#### Execution Details
-
-The module `src/exec.ts` provides a `resolveField` function that:
-
-1. Takes the Bun `$` shell, a command template string (or `undefined`), a variables record, and a fallback default value
-2. If the command template is `undefined` or empty, returns the fallback
-3. Substitutes all `${var_name}` placeholders in the command with values from the variables record
-4. Executes the substituted command via the Bun `$` shell, capturing stdout
-5. Returns the trimmed stdout if the command succeeds
-6. Returns the fallback value if the command fails (non-zero exit, exception, etc.)
 
 ### Notification Icons
 
@@ -221,37 +167,51 @@ Default icon URLs are served from this repo's `assets/` directory via `raw.githu
 
 #### Icon Configuration
 
-- `icon` (optional) -- an object containing icon-related configuration.
-  - `icon.mode` (optional, defaults to `"dark"`) -- determines which icon variant to use. Must be `"light"` or `"dark"`. If unset or set to any other value, defaults to `"dark"`. This setting reflects whether the target device receiving push notifications uses light or dark mode.
-  - `icon.variant` (optional) -- an object containing custom icon URL overrides per mode variant.
-    - `icon.variant.light` (optional) -- custom URL to use as the notification icon when `icon.mode` is `"light"`. When set, this overrides the default light mode icon URL. Must point to a JPEG or PNG image.
-    - `icon.variant.dark` (optional) -- custom URL to use as the notification icon when `icon.mode` is `"dark"`. When set, this overrides the default dark mode icon URL. Must point to a JPEG or PNG image.
+- `backend.icon` (optional) -- an object containing icon-related configuration.
+  - `backend.icon.mode` (optional, defaults to `"dark"`) -- determines which icon variant to use. Must be `"light"` or `"dark"`. If unset or set to any other value, defaults to `"dark"`. This setting reflects whether the target device receiving push notifications uses light or dark mode.
+  - `backend.icon.variant` (optional) -- an object containing custom icon URL overrides per mode variant.
+    - `backend.icon.variant.light` (optional) -- custom URL to use as the notification icon when `icon.mode` is `"light"`. When set, this overrides the default light mode icon URL. Must point to a JPEG or PNG image.
+    - `backend.icon.variant.dark` (optional) -- custom URL to use as the notification icon when `icon.mode` is `"dark"`. When set, this overrides the default dark mode icon URL. Must point to a JPEG or PNG image.
 
 The icon resolution logic is:
 
-1. Determine the mode from `icon.mode` (default: `"dark"`).
-2. If the mode is `"light"` and `icon.variant.light` is set, use that URL.
-3. If the mode is `"dark"` and `icon.variant.dark` is set, use that URL.
+1. Determine the mode from `backend.icon.mode` (default: `"dark"`).
+2. If the mode is `"light"` and `backend.icon.variant.light` is set, use that URL.
+3. If the mode is `"dark"` and `backend.icon.variant.dark` is set, use that URL.
 4. Otherwise, use the default `raw.githubusercontent.com` PNG URL for the corresponding mode.
 
 ### Publishing via ntfy.sh
 
-Notifications are sent via HTTP POST:
+The `send()` method of the notification backend sends notifications via HTTP POST:
 
 ```
 POST https://ntfy.sh/<topic>
 Headers:
-  Title: <title>
-  Priority: <priority>
-  Tags: <tags>
+  Title: <title from NotificationContext>
+  Priority: <priority from backend config>
+  Tags: <default tag for the event type>
   X-Icon: <resolved icon URL based on mode and config settings>
   Authorization: Bearer <token>  (if token is set)
-Body: <message>
+Body: <message from NotificationContext>
 ```
 
-The `NotificationPayload` type must include an optional `priority` field. When set, it overrides the global `config.priority` for that specific notification. This allows per-event priority commands to take effect.
+#### Default Tags
 
-When `config.fetchTimeout` is set (parsed from the `fetchTimeout` config property), the `fetch` call must include a `signal` option set to `AbortSignal.timeout(config.fetchTimeout)` where `config.fetchTimeout` is the timeout in milliseconds. This ensures the HTTP request is aborted if the ntfy.sh server does not respond within the configured duration.
+Each event type has a default tag. These tags correspond to emoji shortcodes supported by ntfy.sh:
+
+| Event | Default Tag | Emoji |
+|---|---|---|
+| `session.idle` | `hourglass_done` | ⌛ |
+| `session.error` | `warning` | ⚠️ |
+| `permission.asked` | `lock` | 🔒 |
+
+#### Fetch Timeout
+
+When `backend.fetchTimeout` is set (parsed from an ISO 8601 duration string to milliseconds), the `fetch` call must include a `signal` option set to `AbortSignal.timeout(config.fetchTimeout)`. This ensures the HTTP request is aborted if the ntfy.sh server does not respond within the configured duration. When not set, no timeout is applied (the request uses the default `fetch` behavior).
+
+#### Error Handling
+
+The `send()` method must throw an error if the ntfy.sh server returns a non-OK (non-2xx) HTTP response. The SDK wraps every call to `send()` in a try/catch and silently ignores errors, so throwing here will not crash the host process.
 
 ### Node.js Version Support
 
@@ -265,8 +225,9 @@ The plugin must support all currently supported versions of Node.js (i.e., versi
 - TypeScript
 - ESLint with typescript-eslint for linting
 - Vitest for testing
+- `opencode-notification-sdk` as a runtime dependency
 - Small third-party runtime dependencies are allowed and preferred for well-scoped problems. In particular:
-  - Use a small library for parsing ISO 8601 duration strings (e.g., `iso8601-duration` or similar) instead of hand-rolling a parser in `parseISO8601Duration()`.
+  - Use a small library for parsing ISO 8601 duration strings (e.g., `iso8601-duration` or similar) instead of hand-rolling a parser.
 - Beyond the above, avoid unnecessary runtime dependencies. Node.js built-in `fetch` is used for HTTP requests.
 - Publishable as an npm package
 
@@ -278,15 +239,12 @@ opencode-ntfy.sh/
     opencode-icon-light.png  # OpenCode icon for light mode (not published to npm)
     opencode-icon-dark.png   # OpenCode icon for dark mode (not published to npm)
   src/
-    index.ts          # Plugin entry point and export
-    notify.ts         # ntfy.sh HTTP client
-    config.ts         # Configuration from JSON config file
-    exec.ts           # Command execution and template variable substitution
+    index.ts          # Plugin entry point: wires the SDK to the ntfy.sh backend
+    backend.ts        # NotificationBackend implementation (ntfy.sh HTTP client)
+    config.ts         # ntfy.sh-specific backend config parsing and validation
   tests/
-    notify.test.ts    # Tests for the notification client
-    config.test.ts    # Tests for configuration loading
-    plugin.test.ts    # Tests for the plugin hooks
-    exec.test.ts      # Tests for command execution
+    backend.test.ts   # Tests for the ntfy.sh backend (HTTP POST, headers, auth, timeout, errors)
+    config.test.ts    # Tests for ntfy-specific backend config parsing and validation
     typecheck.test.ts # Compile-time type conformance tests
     msw-helpers.ts    # MSW test helpers for capturing HTTP requests
   opencode-ntfy.schema.json  # JSON Schema for the config file (published with npm package)

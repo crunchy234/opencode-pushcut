@@ -251,3 +251,35 @@
 - [x] Rewrite `tests/exec.test.ts` — replace `vi.fn()` with plain call-capturing handler functions
 - [x] Ensure no test file imports `vi` from vitest (only `describe`, `it`, `expect`, lifecycle hooks)
 - [x] Ensure all 70 tests pass, lint is clean, and package builds cleanly
+
+## Phase 29: Migrate to `opencode-notification-sdk`
+
+Migrate the plugin to use `opencode-notification-sdk` as a runtime dependency. The SDK handles all common notification logic (event routing, subagent suppression, shell command templates, default content, config loading). This plugin becomes a thin ntfy.sh-specific backend that only implements `NotificationBackend.send()` and `parseNtfyBackendConfig()`.
+
+### Source code changes
+
+- [x] Rewrite `src/config.ts` as `parseNtfyBackendConfig(raw)`: accepts `Record<string, unknown>` (the SDK's `backend` object), validates ntfy-specific fields (topic, server, token, priority, icon, fetchTimeout), and returns a typed `NtfyBackendConfig`. No file I/O — the SDK handles config loading.
+- [x] Create `src/backend.ts` implementing `NotificationBackend` from the SDK: `send(context)` formats and sends the HTTP POST to ntfy.sh with headers (Title, Priority, Tags, X-Icon, Authorization), body (message), and optional timeout. Uses default tags per event type (`hourglass_done`, `warning`, `lock`).
+- [x] Rewrite `src/index.ts` to wire the SDK: import `createNotificationPlugin` from SDK, create the ntfy backend with `parseNtfyBackendConfig`, and export the plugin with `backendConfigKey: "ntfy"`.
+- [x] Delete `src/notify.ts` (replaced by `src/backend.ts`)
+- [x] Delete `src/exec.ts` (replaced by SDK's template resolution)
+
+### Test changes
+
+- [x] Rewrite `tests/config.test.ts` to test `parseNtfyBackendConfig()` — validates topic, server, token, priority, icon resolution, fetchTimeout parsing
+- [x] Create `tests/backend.test.ts` to test the ntfy.sh backend — HTTP POST, headers, auth, timeout, error handling, default tags per event type
+- [x] Rewrite `tests/typecheck.test.ts` — update type conformance tests for new exports
+- [x] Delete `tests/notify.test.ts` (replaced by `tests/backend.test.ts`)
+- [x] Delete `tests/exec.test.ts` (SDK handles templates)
+- [x] Delete `tests/plugin.test.ts` (SDK handles plugin wiring; backend tested directly)
+- [x] Delete `tests/mock-shell.ts` (no longer needed)
+
+### Schema and config
+
+- [x] Update `opencode-ntfy.schema.json` to reflect SDK config structure: add `enabled`, `events` (with `enabled` per event), `templates` (with `titleCmd`/`messageCmd`), and nest ntfy-specific fields under `backend`
+- [x] Update schema tests for new structure
+
+### Documentation
+
+- [x] Update `README.md` to document SDK-based architecture, new config file path (`notification-ntfy.json`), and new config structure
+- [x] Ensure all tests pass, lint is clean, and package builds cleanly
