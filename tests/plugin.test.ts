@@ -621,6 +621,33 @@ describe("plugin", () => {
         path: { id: "parent-session" },
       });
     });
+
+    it("should send notification when session lookup fails (fall through on error)", async () => {
+      await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
+      server.use(captureHandler("https://ntfy.example.com/test-topic"));
+
+      const mockClient = {
+        session: {
+          get: vi.fn().mockRejectedValue(new Error("Network error")),
+        },
+      };
+
+      // @ts-expect-error - mock client for testing
+      const hooks = await (await import("../src/index.js")).plugin(createMockInput({ client: mockClient }));
+
+      await hooks.event!({
+        event: {
+          type: "session.idle",
+          properties: { sessionID: "some-session" },
+        },
+      });
+
+      expect(getCapturedRequest()).not.toBeNull();
+      expect(getCapturedRequest()!.headers.get("Title")).toBe("Agent Idle");
+      expect(mockClient.session.get).toHaveBeenCalledWith({
+        path: { id: "some-session" },
+      });
+    });
   });
 
   it("should not include a permission.ask hook (spec only uses event hook)", async () => {
