@@ -648,6 +648,31 @@ describe("plugin", () => {
         path: { id: "some-session" },
       });
     });
+
+    it("should NOT suppress permission.asked events from subagent sessions", async () => {
+      await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
+      server.use(captureHandler("https://ntfy.example.com/test-topic"));
+
+      const mockClient = createMockClient({ parentID: "parent-session" });
+
+      // @ts-expect-error - mock client for testing
+      const hooks = await (await import("../src/index.js")).plugin(createMockInput({ client: mockClient }));
+
+      await fireEvent(hooks, {
+        type: "permission.asked",
+        properties: {
+          id: "perm-1",
+          permission: "file.write",
+          sessionID: "child-session",
+          patterns: ["config.json"],
+          metadata: {},
+          always: ["config.json"],
+        },
+      });
+
+      expect(getCapturedRequest()).not.toBeNull();
+      expect(getCapturedRequest()!.headers.get("Title")).toBe("Permission Asked");
+    });
   });
 
   it("should not include a permission.ask hook (spec only uses event hook)", async () => {
