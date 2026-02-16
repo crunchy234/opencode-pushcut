@@ -37,31 +37,107 @@ If there is a discrepancy between PLAN.md and this prompt, always update PLAN.md
   - A timestamp
   - For errors: the error message
   - For permissions: the permission type and patterns
-- The plugin must be configurable via environment variables:
-  - `OPENCODE_NTFY_TOPIC` (required) -- the ntfy.sh topic to publish to
-  - `OPENCODE_NTFY_SERVER` (optional, defaults to `https://ntfy.sh`) -- the ntfy.sh server URL
-  - `OPENCODE_NTFY_TOKEN` (optional) -- bearer token for authentication
-  - `OPENCODE_NTFY_PRIORITY` (optional, defaults to `default`) -- global notification priority (min, low, default, high, max)
-  - `OPENCODE_NTFY_ICON_MODE` (optional, defaults to `dark`) -- whether the target device uses `light` or `dark` mode
-  - `OPENCODE_NTFY_ICON_LIGHT` (optional) -- custom icon URL override for light mode
-  - `OPENCODE_NTFY_ICON_DARK` (optional) -- custom icon URL override for dark mode
-  - `OPENCODE_NTFY_COOLDOWN` (optional) -- ISO 8601 duration for notification cooldown (e.g., `PT30S`, `PT5M`). When set, duplicate notifications for the same event type are suppressed within the cooldown period. When not set, no rate limiting is applied.
-  - `OPENCODE_NTFY_COOLDOWN_EDGE` (optional, defaults to `leading`) -- which edge of the cooldown window triggers the notification. `leading` sends the first notification immediately and suppresses duplicates for the cooldown period. `trailing` suppresses the first notification and allows one after the cooldown period of inactivity.
-  - `OPENCODE_NTFY_FETCH_TIMEOUT` (optional) -- ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., `PT10S` for 10 seconds, `PT1M` for 1 minute). The duration is parsed using the same `parseISO8601Duration()` function from `src/cooldown.ts` (which delegates to a third-party ISO 8601 duration library). When set, the `fetch` call in `sendNotification` uses an `AbortSignal.timeout()` to enforce the timeout. When not set, no timeout is applied (the request uses the default `fetch` behavior).
+- The plugin must be configurable via a JSON configuration file located at `~/.config/opencode/opencode-ntfy.json`, following the pattern established by plugins like `opencode-notifier`. The configuration file has an associated JSON Schema (see [Configuration File](#configuration-file) below for full details).
+  - If the config file does not exist, the plugin is disabled (returns empty hooks).
+  - If the config file exists but cannot be parsed, the plugin must throw an error.
+  - The config file must contain at minimum a `topic` field.
+  - All other fields are optional and have sensible defaults.
+
+### Configuration File
+
+The plugin is configured via a JSON file at `~/.config/opencode/opencode-ntfy.json`. The configuration file must have an associated JSON Schema bundled in the repository at `opencode-ntfy.schema.json`. This schema file must be published with the npm package so that users can reference it in their config file for editor autocompletion and validation.
+
+Users can reference the schema in their config file using the `$schema` property:
+
+```json
+{
+  "$schema": "node_modules/opencode-ntfy.sh/opencode-ntfy.schema.json",
+  "topic": "my-topic"
+}
+```
+
+#### Configuration Properties
+
+| Property | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `$schema` | `string` | No | -- | Path or URL to the JSON Schema for editor validation and autocompletion |
+| `topic` | `string` | **Yes** | -- | The ntfy.sh topic to publish to |
+| `server` | `string` | No | `"https://ntfy.sh"` | The ntfy.sh server URL |
+| `token` | `string` | No | -- | Bearer token for authentication |
+| `priority` | `string` | No | `"default"` | Global notification priority (`min`, `low`, `default`, `high`, `max`) |
+| `iconMode` | `string` | No | `"dark"` | Whether the target device uses `light` or `dark` mode |
+| `iconLight` | `string` | No | -- | Custom icon URL override for light mode |
+| `iconDark` | `string` | No | -- | Custom icon URL override for dark mode |
+| `cooldown` | `string` | No | -- | ISO 8601 duration for notification cooldown (e.g., `PT30S`, `PT5M`). When set, duplicate notifications for the same event type are suppressed within the cooldown period. When not set, no rate limiting is applied. |
+| `cooldownEdge` | `string` | No | `"leading"` | Which edge of the cooldown window triggers the notification. `leading` sends the first notification immediately and suppresses duplicates for the cooldown period. `trailing` suppresses the first notification and allows one after the cooldown period of inactivity. |
+| `fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., `PT10S` for 10 seconds, `PT1M` for 1 minute). The duration is parsed using the same `parseISO8601Duration()` function from `src/cooldown.ts` (which delegates to a third-party ISO 8601 duration library). When set, the `fetch` call in `sendNotification` uses an `AbortSignal.timeout()` to enforce the timeout. When not set, no timeout is applied (the request uses the default `fetch` behavior). |
+| `events` | `object` | No | -- | Per-event custom command overrides (see [Custom Notification Commands](#custom-notification-commands)) |
+
+#### Example Configuration
+
+```json
+{
+  "$schema": "node_modules/opencode-ntfy.sh/opencode-ntfy.schema.json",
+  "topic": "my-notifications",
+  "server": "https://ntfy.sh",
+  "priority": "default",
+  "iconMode": "dark",
+  "cooldown": "PT30S",
+  "cooldownEdge": "leading",
+  "fetchTimeout": "PT10S",
+  "events": {
+    "session.idle": {
+      "titleCmd": "printf \"%s\" \"Agent Idle\"",
+      "messageCmd": "printf \"%s\" \"The agent has finished and is waiting for input.\"",
+      "tagsCmd": "printf \"%s\" \"hourglass_done\"",
+      "priorityCmd": "printf \"%s\" \"default\""
+    }
+  }
+}
+```
+
+#### Config Loading
+
+The `loadConfig()` function in `src/config.ts` must:
+
+1. Construct the config file path via `join(homedir(), ".config", "opencode", "opencode-ntfy.json")` using Node.js `os.homedir()` and `path.join()`
+2. Check if the file exists -- if not, return `undefined` (plugin is disabled)
+3. Read the file with `readFileSync()` and parse with `JSON.parse()`
+4. Validate the parsed object against the expected schema (required fields, valid enum values, valid ISO 8601 durations where applicable)
+5. Throw an error if the file exists but contains invalid JSON or fails validation
+6. Return the typed `NtfyConfig` object with defaults applied for omitted optional fields
+
+#### JSON Schema
+
+The JSON Schema file (`opencode-ntfy.schema.json`) must:
+
+- Be a valid JSON Schema (draft 2020-12 or later)
+- Define all configuration properties with their types, descriptions, defaults, and constraints
+- Use `enum` for fields with a fixed set of valid values (e.g., `priority`, `iconMode`, `cooldownEdge`)
+- Use `pattern` for fields with specific formats where appropriate
+- Mark `topic` as required
+- Include `additionalProperties: false` at the top level to catch typos
+- Include `$schema` as an allowed property so users can reference the schema from within their config file
+- Be included in the npm package `files` list in `package.json`
 
 ### Custom Notification Commands
 
-Each notification field (title, message, tags, priority) can be customized per event by setting an environment variable containing a shell command. The command's stdout (trimmed) is used as the field value. If the command is not set or fails, the hardcoded default is used silently.
+Each notification field (title, message, tags, priority) can be customized per event by setting a shell command in the `events` section of the config file. The command's stdout (trimmed) is used as the field value. If the command is not set or fails, the hardcoded default is used silently.
 
 Commands are executed via the Bun `$` shell provided by the OpenCode plugin input. Before execution, template variables in the command string are substituted with their values. Unset variables are substituted with empty strings.
 
-#### Environment Variables
+#### Event Command Fields
 
-| Event | Title | Message | Tags | Priority |
-|---|---|---|---|---|
-| `session.idle` | `OPENCODE_NTFY_SESSION_IDLE_TITLE_CMD` | `OPENCODE_NTFY_SESSION_IDLE_MESSAGE_CMD` | `OPENCODE_NTFY_SESSION_IDLE_TAGS_CMD` | `OPENCODE_NTFY_SESSION_IDLE_PRIORITY_CMD` |
-| `session.error` | `OPENCODE_NTFY_SESSION_ERROR_TITLE_CMD` | `OPENCODE_NTFY_SESSION_ERROR_MESSAGE_CMD` | `OPENCODE_NTFY_SESSION_ERROR_TAGS_CMD` | `OPENCODE_NTFY_SESSION_ERROR_PRIORITY_CMD` |
-| `permission.asked` | `OPENCODE_NTFY_PERMISSION_TITLE_CMD` | `OPENCODE_NTFY_PERMISSION_MESSAGE_CMD` | `OPENCODE_NTFY_PERMISSION_TAGS_CMD` | `OPENCODE_NTFY_PERMISSION_PRIORITY_CMD` |
+Per-event commands are specified in the `events` object of the config file, keyed by event type. Each event object supports the following optional fields:
+
+| Field | Description |
+|---|---|
+| `titleCmd` | Shell command whose stdout is used as the notification title |
+| `messageCmd` | Shell command whose stdout is used as the notification message body |
+| `tagsCmd` | Shell command whose stdout is used as the notification tags |
+| `priorityCmd` | Shell command whose stdout is used as the notification priority |
+
+The supported event keys are: `session.idle`, `session.error`, `permission.asked`.
 
 #### Template Variables
 
@@ -75,7 +151,7 @@ Commands are executed via the Bun `$` shell provided by the OpenCode plugin inpu
 
 #### Default Values
 
-When a custom command environment variable is not set, the following POSIX-compliant commands are used as defaults to populate the notification title and message content. These commands intentionally omit a trailing newline.
+When a custom command field is not set in the config, the following POSIX-compliant commands are used as defaults to populate the notification title and message content. These commands intentionally omit a trailing newline.
 
 ##### Title Defaults
 
@@ -95,7 +171,7 @@ When a custom command environment variable is not set, the following POSIX-compl
 
 ##### Tag Defaults
 
-Each event type has a default tag used when no custom tags command is set. These tags correspond to emoji shortcodes supported by ntfy.sh:
+Each event type has a default tag used when no custom `tagsCmd` is set. These tags correspond to emoji shortcodes supported by ntfy.sh:
 
 | Event | Default Tag | Emoji |
 |---|---|---|
@@ -138,30 +214,30 @@ Default icon URLs are served from this repo's `assets/` directory via `raw.githu
 - Dark mode (default): `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${version}/assets/opencode-icon-dark.png`
 - Light mode: `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${version}/assets/opencode-icon-light.png`
 
-#### Icon Environment Variables
+#### Icon Configuration
 
-- `OPENCODE_NTFY_ICON_MODE` (optional, defaults to `dark`) -- determines which icon variant to use. Must be explicitly set to `light` or `dark`. If unset or set to any other value, defaults to `dark`. This setting reflects whether the target device receiving push notifications uses light or dark mode.
-- `OPENCODE_NTFY_ICON_LIGHT` (optional) -- custom URL to use as the notification icon when `OPENCODE_NTFY_ICON_MODE` is `light`. When set, this overrides the default light mode icon URL. Must point to a JPEG or PNG image.
-- `OPENCODE_NTFY_ICON_DARK` (optional) -- custom URL to use as the notification icon when `OPENCODE_NTFY_ICON_MODE` is `dark`. When set, this overrides the default dark mode icon URL. Must point to a JPEG or PNG image.
+- `iconMode` (optional, defaults to `"dark"`) -- determines which icon variant to use. Must be `"light"` or `"dark"`. If unset or set to any other value, defaults to `"dark"`. This setting reflects whether the target device receiving push notifications uses light or dark mode.
+- `iconLight` (optional) -- custom URL to use as the notification icon when `iconMode` is `"light"`. When set, this overrides the default light mode icon URL. Must point to a JPEG or PNG image.
+- `iconDark` (optional) -- custom URL to use as the notification icon when `iconMode` is `"dark"`. When set, this overrides the default dark mode icon URL. Must point to a JPEG or PNG image.
 
 The icon resolution logic is:
 
-1. Determine the mode from `OPENCODE_NTFY_ICON_MODE` (default: `dark`).
-2. If the mode is `light` and `OPENCODE_NTFY_ICON_LIGHT` is set, use that URL.
-3. If the mode is `dark` and `OPENCODE_NTFY_ICON_DARK` is set, use that URL.
+1. Determine the mode from `iconMode` (default: `"dark"`).
+2. If the mode is `"light"` and `iconLight` is set, use that URL.
+3. If the mode is `"dark"` and `iconDark` is set, use that URL.
 4. Otherwise, use the default `raw.githubusercontent.com` PNG URL for the corresponding mode.
 
 ### Notification Cooldown
 
 The plugin supports configurable rate limiting to prevent notification spam when the agent rapidly cycles through states.
 
-- `OPENCODE_NTFY_COOLDOWN` accepts an ISO 8601 duration string (e.g., `PT30S` for 30 seconds, `PT5M` for 5 minutes). The duration is parsed by `src/cooldown.ts` using a small third-party ISO 8601 duration parsing library, which supports hours (`H`), minutes (`M`), seconds (`S`), and fractional seconds.
-- `OPENCODE_NTFY_COOLDOWN_EDGE` controls the throttling strategy:
-  - `leading` (default): The first notification fires immediately. Subsequent notifications for the same event type are suppressed until the cooldown period elapses.
-  - `trailing`: Notifications are suppressed until the cooldown period elapses since the last event of that type. Each new event resets the cooldown timer.
+- `cooldown` accepts an ISO 8601 duration string (e.g., `"PT30S"` for 30 seconds, `"PT5M"` for 5 minutes). The duration is parsed by `src/cooldown.ts` using a small third-party ISO 8601 duration parsing library, which supports hours (`H`), minutes (`M`), seconds (`S`), and fractional seconds.
+- `cooldownEdge` controls the throttling strategy:
+  - `"leading"` (default): The first notification fires immediately. Subsequent notifications for the same event type are suppressed until the cooldown period elapses.
+  - `"trailing"`: Notifications are suppressed until the cooldown period elapses since the last event of that type. Each new event resets the cooldown timer.
 - Cooldown is tracked per event type (e.g., `session.idle` and `session.error` have independent cooldown timers).
-- When `OPENCODE_NTFY_COOLDOWN` is not set, no rate limiting is applied.
-- A cooldown of `PT0S` (zero seconds) disables rate limiting.
+- When `cooldown` is not set, no rate limiting is applied.
+- A cooldown of `"PT0S"` (zero seconds) disables rate limiting.
 
 The cooldown guard is implemented in `src/cooldown.ts` and exposes:
 
@@ -179,14 +255,14 @@ Headers:
   Title: <title>
   Priority: <priority>
   Tags: <tags>
-  X-Icon: <resolved icon URL based on mode and environment variables>
+  X-Icon: <resolved icon URL based on mode and config settings>
   Authorization: Bearer <token>  (if token is set)
 Body: <message>
 ```
 
 The `NotificationPayload` type must include an optional `priority` field. When set, it overrides the global `config.priority` for that specific notification. This allows per-event priority commands to take effect.
 
-When `config.fetchTimeout` is set (parsed from `OPENCODE_NTFY_FETCH_TIMEOUT`), the `fetch` call must include a `signal` option set to `AbortSignal.timeout(config.fetchTimeout)` where `config.fetchTimeout` is the timeout in milliseconds. This ensures the HTTP request is aborted if the ntfy.sh server does not respond within the configured duration.
+When `config.fetchTimeout` is set (parsed from the `fetchTimeout` config property), the `fetch` call must include a `signal` option set to `AbortSignal.timeout(config.fetchTimeout)` where `config.fetchTimeout` is the timeout in milliseconds. This ensures the HTTP request is aborted if the ntfy.sh server does not respond within the configured duration.
 
 ### Node.js Version Support
 
@@ -216,7 +292,7 @@ opencode-ntfy.sh/
   src/
     index.ts          # Plugin entry point and export
     notify.ts         # ntfy.sh HTTP client
-    config.ts         # Configuration from environment variables
+    config.ts         # Configuration from JSON config file
     exec.ts           # Command execution and template variable substitution
     cooldown.ts       # ISO 8601 duration parsing and cooldown guard
   tests/
@@ -228,6 +304,7 @@ opencode-ntfy.sh/
     typecheck.test.ts # Compile-time type conformance tests
     mock-shell.ts     # Shared mock BunShell factory
     msw-helpers.ts    # MSW test helpers for capturing HTTP requests
+  opencode-ntfy.schema.json  # JSON Schema for the config file (published with npm package)
   eslint.config.js      # ESLint configuration
   package.json
   tsconfig.json

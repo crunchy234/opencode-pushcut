@@ -1,199 +1,290 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { join } from "node:path";
-import { loadConfig } from "../src/config.js";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: vi.fn(() => "/mock-home"),
+  };
+});
+
+const CONFIG_PATH = join("/mock-home", ".config", "opencode", "opencode-ntfy.json");
+
+const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
 
 const pkg = JSON.parse(
-  readFileSync(join(import.meta.dirname, "..", "package.json"), "utf-8")
+  actualFs.readFileSync(
+    join(import.meta.dirname, "..", "package.json"),
+    "utf-8"
+  )
 );
-const VERSION = pkg.version;
+const VERSION: string = pkg.version;
+
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+});
+
+async function mockConfigFile(config: Record<string, unknown>): Promise<void> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+  vi.mocked(fs.existsSync).mockImplementation((p) => {
+    if (String(p) === CONFIG_PATH) return true;
+    return actualFs.existsSync(p);
+  });
+  vi.mocked(fs.readFileSync).mockImplementation((p, options) => {
+    if (String(p) === CONFIG_PATH) return JSON.stringify(config);
+    return actualFs.readFileSync(p, options);
+  });
+}
+
+async function mockNoConfigFile(): Promise<void> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+  vi.mocked(fs.existsSync).mockImplementation((p) => {
+    if (String(p) === CONFIG_PATH) return false;
+    return actualFs.existsSync(p);
+  });
+}
+
+async function mockInvalidJson(): Promise<void> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+  vi.mocked(fs.existsSync).mockImplementation((p) => {
+    if (String(p) === CONFIG_PATH) return true;
+    return actualFs.existsSync(p);
+  });
+  vi.mocked(fs.readFileSync).mockImplementation((p, options) => {
+    if (String(p) === CONFIG_PATH) return "not valid json {{{";
+    return actualFs.readFileSync(p, options);
+  });
+}
 
 describe("loadConfig", () => {
-  it("should return a config object with the topic when OPENCODE_NTFY_TOPIC is set", () => {
-    const env = { OPENCODE_NTFY_TOPIC: "my-topic" };
-    const config = loadConfig(env);
-    expect(config.topic).toBe("my-topic");
+  it("should return undefined when config file does not exist", async () => {
+    await mockNoConfigFile();
+    const { loadConfig } = await import("../src/config.js");
+    expect(loadConfig()).toBeUndefined();
   });
 
-  it("should throw an error when OPENCODE_NTFY_TOPIC is not set", () => {
-    expect(() => loadConfig({})).toThrow("OPENCODE_NTFY_TOPIC");
+  it("should return a config object with the topic when config file exists", async () => {
+    await mockConfigFile({ topic: "my-topic" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config).toBeDefined();
+    expect(config!.topic).toBe("my-topic");
   });
 
-  it("should not read topic from the old NTFY_TOPIC env var", () => {
-    expect(() => loadConfig({ NTFY_TOPIC: "old-topic" })).toThrow(
-      "OPENCODE_NTFY_TOPIC"
-    );
+  it("should throw when config file contains invalid JSON", async () => {
+    await mockInvalidJson();
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("invalid JSON");
   });
 
-  it("should use default server and priority when not specified", () => {
-    const config = loadConfig({ OPENCODE_NTFY_TOPIC: "test" });
-    expect(config.server).toBe("https://ntfy.sh");
-    expect(config.priority).toBe("default");
-    expect(config.token).toBeUndefined();
+  it("should throw when topic is missing", async () => {
+    await mockConfigFile({});
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("topic");
   });
 
-  it("should use custom server, token, and priority from env", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_SERVER: "https://custom.ntfy.sh",
-      OPENCODE_NTFY_TOKEN: "my-secret-token",
-      OPENCODE_NTFY_PRIORITY: "high",
+  it("should throw when topic is empty string", async () => {
+    await mockConfigFile({ topic: "" });
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("topic");
+  });
+
+  it("should use default server and priority when not specified", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.server).toBe("https://ntfy.sh");
+    expect(config!.priority).toBe("default");
+    expect(config!.token).toBeUndefined();
+  });
+
+  it("should use custom server, token, and priority from config file", async () => {
+    await mockConfigFile({
+      topic: "test",
+      server: "https://custom.ntfy.sh",
+      token: "my-secret-token",
+      priority: "high",
     });
-    expect(config.server).toBe("https://custom.ntfy.sh");
-    expect(config.token).toBe("my-secret-token");
-    expect(config.priority).toBe("high");
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.server).toBe("https://custom.ntfy.sh");
+    expect(config!.token).toBe("my-secret-token");
+    expect(config!.priority).toBe("high");
   });
 
-  it("should throw when OPENCODE_NTFY_PRIORITY is not a valid value", () => {
-    expect(() =>
-      loadConfig({
-        OPENCODE_NTFY_TOPIC: "test",
-        OPENCODE_NTFY_PRIORITY: "invalid",
-      })
-    ).toThrow("OPENCODE_NTFY_PRIORITY");
+  it("should throw when priority is not a valid value", async () => {
+    await mockConfigFile({ topic: "test", priority: "invalid" });
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("priority");
   });
 
-  it("should default iconUrl to dark mode GitHub raw URL using package version", () => {
-    const config = loadConfig({ OPENCODE_NTFY_TOPIC: "test" });
-    expect(config.iconUrl).toBe(
+  it("should default iconUrl to dark mode GitHub raw URL using package version", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-dark.png`
     );
   });
 
-  it("should use light mode icon URL when OPENCODE_NTFY_ICON_MODE is light", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "light",
-    });
-    expect(config.iconUrl).toBe(
+  it("should use light mode icon URL when iconMode is light", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "light" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-light.png`
     );
   });
 
-  it("should use dark mode icon URL when OPENCODE_NTFY_ICON_MODE is dark", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "dark",
-    });
-    expect(config.iconUrl).toBe(
+  it("should use dark mode icon URL when iconMode is dark", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "dark" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-dark.png`
     );
   });
 
-  it("should default to dark mode when OPENCODE_NTFY_ICON_MODE is an invalid value", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "neon",
-    });
-    expect(config.iconUrl).toBe(
+  it("should default to dark mode when iconMode is an invalid value", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "neon" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-dark.png`
     );
   });
 
-  it("should use OPENCODE_NTFY_ICON_DARK override when mode is dark", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_DARK: "https://example.com/my-dark-icon.png",
-    });
-    expect(config.iconUrl).toBe("https://example.com/my-dark-icon.png");
+  it("should use iconDark override when mode is dark", async () => {
+    await mockConfigFile({ topic: "test", iconDark: "https://example.com/my-dark-icon.png" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe("https://example.com/my-dark-icon.png");
   });
 
-  it("should use OPENCODE_NTFY_ICON_LIGHT override when mode is light", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "light",
-      OPENCODE_NTFY_ICON_LIGHT: "https://example.com/my-light-icon.png",
-    });
-    expect(config.iconUrl).toBe("https://example.com/my-light-icon.png");
+  it("should use iconLight override when mode is light", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "light", iconLight: "https://example.com/my-light-icon.png" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe("https://example.com/my-light-icon.png");
   });
 
-  it("should ignore OPENCODE_NTFY_ICON_LIGHT when mode is dark", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "dark",
-      OPENCODE_NTFY_ICON_LIGHT: "https://example.com/my-light-icon.png",
-    });
-    expect(config.iconUrl).toBe(
+  it("should ignore iconLight when mode is dark", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "dark", iconLight: "https://example.com/my-light-icon.png" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-dark.png`
     );
   });
 
-  it("should ignore OPENCODE_NTFY_ICON_DARK when mode is light", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_ICON_MODE: "light",
-      OPENCODE_NTFY_ICON_DARK: "https://example.com/my-dark-icon.png",
-    });
-    expect(config.iconUrl).toBe(
+  it("should ignore iconDark when mode is light", async () => {
+    await mockConfigFile({ topic: "test", iconMode: "light", iconDark: "https://example.com/my-dark-icon.png" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.iconUrl).toBe(
       `https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/v${VERSION}/assets/opencode-icon-light.png`
     );
   });
 
-  it("should default cooldown to undefined when OPENCODE_NTFY_COOLDOWN is not set", () => {
-    const config = loadConfig({ OPENCODE_NTFY_TOPIC: "test" });
-    expect(config.cooldown).toBeUndefined();
+  it("should default cooldown to undefined when not set", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.cooldown).toBeUndefined();
   });
 
-  it("should set cooldown from OPENCODE_NTFY_COOLDOWN", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_COOLDOWN: "PT30S",
+  it("should set cooldown from config file", async () => {
+    await mockConfigFile({ topic: "test", cooldown: "PT30S" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.cooldown).toBe("PT30S");
+  });
+
+  it("should throw for invalid cooldown value", async () => {
+    await mockConfigFile({ topic: "test", cooldown: "invalid" });
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("Invalid ISO 8601 duration");
+  });
+
+  it("should default cooldownEdge to leading when not set", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.cooldownEdge).toBe("leading");
+  });
+
+  it("should set cooldownEdge from config file", async () => {
+    await mockConfigFile({ topic: "test", cooldown: "PT30S", cooldownEdge: "trailing" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.cooldownEdge).toBe("trailing");
+  });
+
+  it("should throw for invalid cooldownEdge value", async () => {
+    await mockConfigFile({ topic: "test", cooldown: "PT30S", cooldownEdge: "middle" });
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("cooldownEdge");
+  });
+
+  it("should default fetchTimeout to undefined when not set", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.fetchTimeout).toBeUndefined();
+  });
+
+  it("should set fetchTimeout in milliseconds from config file", async () => {
+    await mockConfigFile({ topic: "test", fetchTimeout: "PT10S" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.fetchTimeout).toBe(10000);
+  });
+
+  it("should throw for invalid fetchTimeout value", async () => {
+    await mockConfigFile({ topic: "test", fetchTimeout: "invalid" });
+    const { loadConfig } = await import("../src/config.js");
+    expect(() => loadConfig()).toThrow("Invalid ISO 8601 duration");
+  });
+
+  it("should parse events object with custom commands", async () => {
+    await mockConfigFile({
+      topic: "test",
+      events: {
+        "session.idle": {
+          titleCmd: 'printf "%s" "Custom Title"',
+          messageCmd: 'printf "%s" "Custom Message"',
+        },
+      },
     });
-    expect(config.cooldown).toBe("PT30S");
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.events).toBeDefined();
+    expect(config!.events!["session.idle"]!.titleCmd).toBe('printf "%s" "Custom Title"');
+    expect(config!.events!["session.idle"]!.messageCmd).toBe('printf "%s" "Custom Message"');
   });
 
-  it("should throw for invalid OPENCODE_NTFY_COOLDOWN value", () => {
-    expect(() =>
-      loadConfig({
-        OPENCODE_NTFY_TOPIC: "test",
-        OPENCODE_NTFY_COOLDOWN: "invalid",
-      })
-    ).toThrow("Invalid ISO 8601 duration");
-  });
-
-  it("should default cooldownEdge to undefined when OPENCODE_NTFY_COOLDOWN_EDGE is not set", () => {
-    const config = loadConfig({ OPENCODE_NTFY_TOPIC: "test" });
-    expect(config.cooldownEdge).toBeUndefined();
-  });
-
-  it("should set cooldownEdge from OPENCODE_NTFY_COOLDOWN_EDGE", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_COOLDOWN: "PT30S",
-      OPENCODE_NTFY_COOLDOWN_EDGE: "trailing",
-    });
-    expect(config.cooldownEdge).toBe("trailing");
-  });
-
-  it("should throw for invalid OPENCODE_NTFY_COOLDOWN_EDGE value", () => {
-    expect(() =>
-      loadConfig({
-        OPENCODE_NTFY_TOPIC: "test",
-        OPENCODE_NTFY_COOLDOWN: "PT30S",
-        OPENCODE_NTFY_COOLDOWN_EDGE: "middle",
-      })
-    ).toThrow("OPENCODE_NTFY_COOLDOWN_EDGE");
-  });
-
-  it("should default fetchTimeout to undefined when OPENCODE_NTFY_FETCH_TIMEOUT is not set", () => {
-    const config = loadConfig({ OPENCODE_NTFY_TOPIC: "test" });
-    expect(config.fetchTimeout).toBeUndefined();
-  });
-
-  it("should set fetchTimeout in milliseconds from OPENCODE_NTFY_FETCH_TIMEOUT", () => {
-    const config = loadConfig({
-      OPENCODE_NTFY_TOPIC: "test",
-      OPENCODE_NTFY_FETCH_TIMEOUT: "PT10S",
-    });
-    expect(config.fetchTimeout).toBe(10000);
-  });
-
-  it("should throw for invalid OPENCODE_NTFY_FETCH_TIMEOUT value", () => {
-    expect(() =>
-      loadConfig({
-        OPENCODE_NTFY_TOPIC: "test",
-        OPENCODE_NTFY_FETCH_TIMEOUT: "invalid",
-      })
-    ).toThrow("Invalid ISO 8601 duration");
+  it("should return undefined events when events is not in config", async () => {
+    await mockConfigFile({ topic: "test" });
+    const { loadConfig } = await import("../src/config.js");
+    const config = loadConfig();
+    expect(config!.events).toBeUndefined();
   });
 });

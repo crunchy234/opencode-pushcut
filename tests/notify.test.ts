@@ -26,6 +26,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -52,6 +53,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -74,6 +76,7 @@ describe("sendNotification", () => {
       priority: "default",
       token: "my-secret-token",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -97,6 +100,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -119,6 +123,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "low",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -140,6 +145,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -164,6 +170,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
       fetchTimeout: 10000,
     };
 
@@ -189,6 +196,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await sendNotification(config, {
@@ -219,6 +227,7 @@ describe("sendNotification", () => {
       server: "https://ntfy.sh",
       priority: "default",
       iconUrl: "https://example.com/icon.png",
+      cooldownEdge: "leading",
     };
 
     await expect(

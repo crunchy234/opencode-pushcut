@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
-import defaultExport, { plugin } from "../src/index.js";
+import { join } from "node:path";
 import {
   server,
   captureHandler,
@@ -9,13 +9,64 @@ import {
 } from "./msw-helpers.js";
 import { createMockShell } from "./mock-shell.js";
 
+const CONFIG_PATH = join("/mock-home", ".config", "opencode", "opencode-ntfy.json");
+
+// We need to mock fs and os before importing the module under test
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
+    readFileSync: vi.fn(actual.readFileSync),
+  };
+});
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    homedir: vi.fn(() => "/mock-home"),
+  };
+});
+
+// Pre-load actual fs for delegation in mocks
+const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs");
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(async () => {
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+});
 afterEach(() => {
   resetCapturedRequest();
   server.resetHandlers();
-  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 afterAll(() => server.close());
+
+async function mockConfigFile(config: Record<string, unknown>): Promise<void> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+  vi.mocked(fs.existsSync).mockImplementation((p) => {
+    if (String(p) === CONFIG_PATH) return true;
+    return actualFs.existsSync(p);
+  });
+  vi.mocked(fs.readFileSync).mockImplementation((p, options) => {
+    if (String(p) === CONFIG_PATH) return JSON.stringify(config);
+    return actualFs.readFileSync(p, options);
+  });
+}
+
+async function mockNoConfigFile(): Promise<void> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  vi.mocked(os.homedir).mockReturnValue("/mock-home");
+  vi.mocked(fs.existsSync).mockImplementation((p) => {
+    if (String(p) === CONFIG_PATH) return false;
+    return actualFs.existsSync(p);
+  });
+}
 
 function createMockInput(
   overrides: Partial<PluginInput> = {}
@@ -50,15 +101,17 @@ async function fireEvent(
 }
 
 describe("plugin", () => {
-  it("should satisfy the Plugin type from @opencode-ai/plugin", () => {
+  it("should satisfy the Plugin type from @opencode-ai/plugin", async () => {
+    const { plugin } = await import("../src/index.js");
     const p: Plugin = plugin;
     expect(p).toBe(plugin);
   });
 
   it("should be an async function that returns hooks with an event handler", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
+    await mockConfigFile({ topic: "test-topic" });
     server.use(captureHandler("https://ntfy.sh/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     expect(hooks).toBeDefined();
@@ -67,10 +120,10 @@ describe("plugin", () => {
   });
 
   it("should send a notification when a session.idle event is received", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -87,10 +140,10 @@ describe("plugin", () => {
   });
 
   it("should send a notification with error message when a session.error event is received", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -112,16 +165,19 @@ describe("plugin", () => {
     expect(getCapturedRequest()!.headers.get("Title")).toBe("Agent Error");
   });
 
-  it("should return empty hooks when OPENCODE_NTFY_TOPIC is not set", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "");
+  it("should return empty hooks when config file does not exist", async () => {
+    await mockNoConfigFile();
+
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
     expect(hooks.event).toBeUndefined();
   });
 
   it("should not send a notification for non-session events", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
+    await mockConfigFile({ topic: "test-topic" });
     server.use(captureHandler("https://ntfy.sh/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await fireEvent(hooks, {
@@ -133,10 +189,10 @@ describe("plugin", () => {
   });
 
   it("should send a notification when a permission.asked event is received via the event hook", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await fireEvent(hooks, {
@@ -157,14 +213,21 @@ describe("plugin", () => {
     expect(getCapturedRequest()!.headers.get("Title")).toBe("Permission Asked");
   });
 
-  it("should have a default export that is the same as the named plugin export", () => {
-    expect(defaultExport).toBe(plugin);
+  it("should have a default export that is the same as the named plugin export", async () => {
+    const mod = await import("../src/index.js");
+    expect(mod.default).toBe(mod.plugin);
   });
 
-  it("should use custom title command for session.idle when OPENCODE_NTFY_SESSION_IDLE_TITLE_CMD is set", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_SESSION_IDLE_TITLE_CMD", 'echo "Custom Idle Title"');
+  it("should use custom title command for session.idle from events config", async () => {
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      events: {
+        "session.idle": {
+          titleCmd: 'echo "Custom Idle Title"',
+        },
+      },
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
     const mock$ = createMockShell((cmd) => {
@@ -174,6 +237,7 @@ describe("plugin", () => {
       return { stdout: "", exitCode: 1 };
     });
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput({ $: mock$ }));
 
     await hooks.event!({
@@ -187,10 +251,16 @@ describe("plugin", () => {
     expect(getCapturedRequest()!.headers.get("Title")).toBe("Custom Idle Title");
   });
 
-  it("should use custom priority command for session.error", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_SESSION_ERROR_PRIORITY_CMD", "echo max");
+  it("should use custom priority command for session.error from events config", async () => {
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      events: {
+        "session.error": {
+          priorityCmd: "echo max",
+        },
+      },
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
     const mock$ = createMockShell((cmd) => {
@@ -200,6 +270,7 @@ describe("plugin", () => {
       return { stdout: "", exitCode: 1 };
     });
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput({ $: mock$ }));
 
     await hooks.event!({
@@ -220,9 +291,15 @@ describe("plugin", () => {
   });
 
   it("should substitute template variables in custom commands using underscored names", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_SESSION_IDLE_TITLE_CMD", 'echo "${event} is done"');
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      events: {
+        "session.idle": {
+          titleCmd: 'echo "${event} is done"',
+        },
+      },
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
     const mock$ = createMockShell((cmd) => {
@@ -232,6 +309,7 @@ describe("plugin", () => {
       return { stdout: "", exitCode: 1 };
     });
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput({ $: mock$ }));
 
     await hooks.event!({
@@ -246,10 +324,10 @@ describe("plugin", () => {
   });
 
   it("should include X-Icon header with default dark icon URL in session.idle notification", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -266,12 +344,11 @@ describe("plugin", () => {
     expect(iconHeader).toContain("raw.githubusercontent.com");
   });
 
-  it("should include X-Icon header with light icon URL when OPENCODE_NTFY_ICON_MODE is light", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_ICON_MODE", "light");
+  it("should include X-Icon header with light icon URL when iconMode is light", async () => {
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com", iconMode: "light" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -289,10 +366,10 @@ describe("plugin", () => {
   });
 
   it("should use default title 'Agent Idle' for session.idle events", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -307,10 +384,10 @@ describe("plugin", () => {
   });
 
   it("should use default title 'Agent Error' for session.error events", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -331,10 +408,10 @@ describe("plugin", () => {
   });
 
   it("should use default title 'Permission Asked' for permission.asked events", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await fireEvent(hooks, {
@@ -354,10 +431,10 @@ describe("plugin", () => {
   });
 
   it("should use default message for session.idle per spec", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -374,10 +451,10 @@ describe("plugin", () => {
   });
 
   it("should use default message for session.error per spec", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -400,10 +477,10 @@ describe("plugin", () => {
   });
 
   it("should use default message for permission.asked per spec", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+    await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await fireEvent(hooks, {
@@ -424,12 +501,15 @@ describe("plugin", () => {
     );
   });
 
-  it("should use custom icon URL from OPENCODE_NTFY_ICON_DARK when mode is dark", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_ICON_DARK", "https://example.com/custom-dark.png");
+  it("should use custom icon URL from iconDark config when mode is dark", async () => {
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      iconDark: "https://example.com/custom-dark.png",
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -446,15 +526,23 @@ describe("plugin", () => {
   });
 
   it("should not include a permission.ask hook (spec only uses event hook)", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
+    await mockConfigFile({ topic: "test-topic" });
+
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
     expect(hooks["permission.ask"]).toBeUndefined();
   });
 
   it("should use custom commands for permission.asked event via event hook", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_PERMISSION_TITLE_CMD", 'echo "Custom Permission"');
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      events: {
+        "permission.asked": {
+          titleCmd: 'echo "Custom Permission"',
+        },
+      },
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
     const mock$ = createMockShell((cmd) => {
@@ -464,6 +552,7 @@ describe("plugin", () => {
       return { stdout: "", exitCode: 1 };
     });
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput({ $: mock$ }));
 
     await fireEvent(hooks, {
@@ -484,11 +573,14 @@ describe("plugin", () => {
 
   it("should suppress duplicate notifications within the cooldown period", async () => {
     vi.useFakeTimers();
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_COOLDOWN", "PT5S");
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      cooldown: "PT5S",
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -514,11 +606,14 @@ describe("plugin", () => {
 
   it("should allow notifications after cooldown period expires", async () => {
     vi.useFakeTimers();
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
-    vi.stubEnv("OPENCODE_NTFY_COOLDOWN", "PT5S");
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+      cooldown: "PT5S",
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({
@@ -543,11 +638,14 @@ describe("plugin", () => {
     vi.useRealTimers();
   });
 
-  it("should not apply cooldown when OPENCODE_NTFY_COOLDOWN is not set", async () => {
-    vi.stubEnv("OPENCODE_NTFY_TOPIC", "test-topic");
-    vi.stubEnv("OPENCODE_NTFY_SERVER", "https://ntfy.example.com");
+  it("should not apply cooldown when cooldown is not set", async () => {
+    await mockConfigFile({
+      topic: "test-topic",
+      server: "https://ntfy.example.com",
+    });
     server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
+    const { plugin } = await import("../src/index.js");
     const hooks = await plugin(createMockInput());
 
     await hooks.event!({

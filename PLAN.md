@@ -178,3 +178,24 @@
 - [x] Simplify `buildVars` in `src/index.ts` — replace manual `Partial<Record<...>>` destructuring with `?? ""` defaults with a spread-based approach using `Record<string, string>`
 - [x] Simplify cooldown guard creation in `src/index.ts` — replace `let` + `if` block with `const` + ternary, removing unused `CooldownGuard` type import
 - [x] Ensure all 88 tests pass, lint is clean, and package builds cleanly
+
+## Phase 23: Migrate Config from Environment Variables to JSON Config File
+
+- [ ] Rewrite `src/config.ts` to read config from `~/.config/opencode/opencode-ntfy.json` instead of environment variables
+  - `loadConfig()` takes no arguments; uses `os.homedir()` and `path.join()` to locate the file
+  - Returns `NtfyConfig | undefined`: `undefined` when file doesn't exist (plugin disabled), `NtfyConfig` when valid
+  - Throws an error if the file exists but contains invalid JSON or fails validation
+  - Validates required `topic` field, valid enum values for `priority`/`iconMode`/`cooldownEdge`, valid ISO 8601 durations
+  - Applies defaults for omitted optional fields (`server`, `priority`, `iconMode`, `cooldownEdge`)
+  - Resolves `iconUrl` from `iconMode`, `iconLight`, `iconDark` config properties
+  - Parses `cooldown` (validates ISO 8601 duration string, stores as string)
+  - Parses `fetchTimeout` ISO 8601 duration into milliseconds
+  - Supports `events` object with per-event custom command overrides (`titleCmd`, `messageCmd`, `tagsCmd`, `priorityCmd`)
+- [ ] Rewrite `tests/config.test.ts` to test JSON-file-based config loading (mock `readFileSync` and `existsSync`)
+- [ ] Rewrite `src/index.ts` to use JSON-file-based config
+  - Read custom commands from `config.events[eventType]` instead of env vars
+  - Use `loadConfig()` with no arguments; return empty hooks when it returns `undefined`
+- [ ] Rewrite `tests/plugin.test.ts` to mock JSON config file instead of env vars
+- [ ] Create `opencode-ntfy.schema.json` — JSON Schema (draft 2020-12) for the config file
+- [ ] Add `opencode-ntfy.schema.json` to `package.json` `files` list
+- [ ] Ensure all tests pass, lint is clean, and package builds cleanly

@@ -66,7 +66,7 @@ void _check;
 import { sendNotification } from "./notify.js";
 import type { NtfyConfig } from "./config.js";
 
-const config: NtfyConfig = { topic: "t", server: "s", priority: "default" };
+const config: NtfyConfig = { topic: "t", server: "s", priority: "default", iconUrl: "https://example.com/icon.png", cooldownEdge: "leading" };
 const payload = { title: "t", message: "m", tags: "tag" };
 
 // sendNotification should only accept 2 arguments (config, payload).
