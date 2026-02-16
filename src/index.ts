@@ -36,10 +36,12 @@ async function resolveAndSend(
   const tagsCmd = eventCommands?.tagsCmd;
   const priorityCmd = eventCommands?.priorityCmd;
 
-  const title = await resolveField($, titleCmd, vars, defaults.title);
-  const message = await resolveField($, messageCmd, vars, defaults.message);
-  const tags = await resolveField($, tagsCmd, vars, defaults.tags);
-  const priority = await resolveField($, priorityCmd, vars, config.priority);
+  const [title, message, tags, priority] = await Promise.all([
+    resolveField($, titleCmd, vars, defaults.title),
+    resolveField($, messageCmd, vars, defaults.message),
+    resolveField($, tagsCmd, vars, defaults.tags),
+    resolveField($, priorityCmd, vars, config.priority),
+  ]);
 
   await sendNotification(config, {
     title,
