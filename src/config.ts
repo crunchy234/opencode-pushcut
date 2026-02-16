@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { parseISO8601Duration } from "./cooldown.js";
+import { parse, toSeconds } from "iso8601-duration";
 
 export interface EventCommands {
   titleCmd?: string;
@@ -17,10 +17,19 @@ export interface NtfyConfig {
   token?: string;
   priority: string;
   iconUrl: string;
-  cooldown?: string;
-  cooldownEdge: "leading" | "trailing";
   fetchTimeout?: number;
   events?: Record<string, EventCommands>;
+}
+
+function parseISO8601Duration(duration: string): number {
+  try {
+    const parsed = parse(duration);
+    return Math.round(toSeconds(parsed) * 1000);
+  } catch {
+    throw new Error(
+      `Invalid ISO 8601 duration: "${duration}". Expected format like PT30S, PT5M, PT1H30M15S.`
+    );
+  }
 }
 
 const VALID_PRIORITIES = ["min", "low", "default", "high", "max"] as const;
@@ -101,21 +110,6 @@ export function loadConfig(): NtfyConfig | undefined {
 
   const iconUrl = resolveIconUrl(iconMode, iconLight, iconDark);
 
-  // Optional: cooldown
-  const cooldown = typeof parsed.cooldown === "string" ? parsed.cooldown : undefined;
-  if (cooldown) {
-    parseISO8601Duration(cooldown);
-  }
-
-  // Optional: cooldownEdge
-  const cooldownEdgeRaw = typeof parsed.cooldownEdge === "string" ? parsed.cooldownEdge : "leading";
-  if (cooldownEdgeRaw !== "leading" && cooldownEdgeRaw !== "trailing") {
-    throw new Error(
-      "Config 'cooldownEdge' must be one of: leading, trailing"
-    );
-  }
-  const cooldownEdge = cooldownEdgeRaw === "trailing" ? "trailing" : "leading";
-
   // Optional: fetchTimeout
   const fetchTimeout = typeof parsed.fetchTimeout === "string"
     ? parseISO8601Duration(parsed.fetchTimeout)
@@ -132,8 +126,6 @@ export function loadConfig(): NtfyConfig | undefined {
     token,
     priority,
     iconUrl,
-    cooldown,
-    cooldownEdge,
     fetchTimeout,
     events,
   };

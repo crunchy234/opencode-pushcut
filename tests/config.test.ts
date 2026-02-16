@@ -204,46 +204,6 @@ describe("loadConfig", () => {
     );
   });
 
-  it("should default cooldown to undefined when not set", async () => {
-    await mockConfigFile({ topic: "test" });
-    const { loadConfig } = await import("../src/config.js");
-    const config = loadConfig();
-    expect(config!.cooldown).toBeUndefined();
-  });
-
-  it("should set cooldown from config file", async () => {
-    await mockConfigFile({ topic: "test", cooldown: "PT30S" });
-    const { loadConfig } = await import("../src/config.js");
-    const config = loadConfig();
-    expect(config!.cooldown).toBe("PT30S");
-  });
-
-  it("should throw for invalid cooldown value", async () => {
-    await mockConfigFile({ topic: "test", cooldown: "invalid" });
-    const { loadConfig } = await import("../src/config.js");
-    expect(() => loadConfig()).toThrow("Invalid ISO 8601 duration");
-  });
-
-  it("should default cooldownEdge to leading when not set", async () => {
-    await mockConfigFile({ topic: "test" });
-    const { loadConfig } = await import("../src/config.js");
-    const config = loadConfig();
-    expect(config!.cooldownEdge).toBe("leading");
-  });
-
-  it("should set cooldownEdge from config file", async () => {
-    await mockConfigFile({ topic: "test", cooldown: "PT30S", cooldownEdge: "trailing" });
-    const { loadConfig } = await import("../src/config.js");
-    const config = loadConfig();
-    expect(config!.cooldownEdge).toBe("trailing");
-  });
-
-  it("should throw for invalid cooldownEdge value", async () => {
-    await mockConfigFile({ topic: "test", cooldown: "PT30S", cooldownEdge: "middle" });
-    const { loadConfig } = await import("../src/config.js");
-    expect(() => loadConfig()).toThrow("cooldownEdge");
-  });
-
   it("should default fetchTimeout to undefined when not set", async () => {
     await mockConfigFile({ topic: "test" });
     const { loadConfig } = await import("../src/config.js");
@@ -312,8 +272,6 @@ describe("JSON Schema", () => {
     expect(properties).toContain("iconMode");
     expect(properties).toContain("iconLight");
     expect(properties).toContain("iconDark");
-    expect(properties).toContain("cooldown");
-    expect(properties).toContain("cooldownEdge");
     expect(properties).toContain("fetchTimeout");
     expect(properties).toContain("events");
   });

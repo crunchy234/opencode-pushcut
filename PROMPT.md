@@ -71,9 +71,7 @@ Users can reference the schema in their config file using the `$schema` property
 | `iconMode` | `string` | No | `"dark"` | Whether the target device uses `light` or `dark` mode |
 | `iconLight` | `string` | No | -- | Custom icon URL override for light mode |
 | `iconDark` | `string` | No | -- | Custom icon URL override for dark mode |
-| `cooldown` | `string` | No | -- | ISO 8601 duration for notification cooldown (e.g., `PT30S`, `PT5M`). When set, duplicate notifications for the same event type are suppressed within the cooldown period. When not set, no rate limiting is applied. |
-| `cooldownEdge` | `string` | No | `"leading"` | Which edge of the cooldown window triggers the notification. `leading` sends the first notification immediately and suppresses duplicates for the cooldown period. `trailing` suppresses the first notification and allows one after the cooldown period of inactivity. |
-| `fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., `PT10S` for 10 seconds, `PT1M` for 1 minute). The duration is parsed using the same `parseISO8601Duration()` function from `src/cooldown.ts` (which delegates to a third-party ISO 8601 duration library). When set, the `fetch` call in `sendNotification` uses an `AbortSignal.timeout()` to enforce the timeout. When not set, no timeout is applied (the request uses the default `fetch` behavior). |
+| `fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout when calling the ntfy.sh server (e.g., `PT10S` for 10 seconds, `PT1M` for 1 minute). The duration is parsed using `parseISO8601Duration()` (which delegates to a third-party ISO 8601 duration library). When set, the `fetch` call in `sendNotification` uses an `AbortSignal.timeout()` to enforce the timeout. When not set, no timeout is applied (the request uses the default `fetch` behavior). |
 | `events` | `object` | No | -- | Per-event custom command overrides (see [Custom Notification Commands](#custom-notification-commands)) |
 
 #### Example Configuration
@@ -85,8 +83,6 @@ Users can reference the schema in their config file using the `$schema` property
   "server": "https://ntfy.sh",
   "priority": "default",
   "iconMode": "dark",
-  "cooldown": "PT30S",
-  "cooldownEdge": "leading",
   "fetchTimeout": "PT10S",
   "events": {
     "session.idle": {
@@ -106,7 +102,7 @@ The `loadConfig()` function in `src/config.ts` must:
 1. Construct the config file path via `join(homedir(), ".config", "opencode", "opencode-ntfy.json")` using Node.js `os.homedir()` and `path.join()`
 2. Check if the file exists -- if not, return `undefined` (plugin is disabled)
 3. Read the file with `readFileSync()` and parse with `JSON.parse()`
-4. Validate the parsed object against the expected schema (required fields, valid enum values, valid ISO 8601 durations where applicable)
+4. Validate the parsed object against the expected schema (required fields, valid enum values, valid ISO 8601 duration for `fetchTimeout` where applicable)
 5. Throw an error if the file exists but contains invalid JSON or fails validation
 6. Return the typed `NtfyConfig` object with defaults applied for omitted optional fields
 
@@ -116,7 +112,7 @@ The JSON Schema file (`opencode-ntfy.schema.json`) must:
 
 - Be a valid JSON Schema (draft 2020-12 or later)
 - Define all configuration properties with their types, descriptions, defaults, and constraints
-- Use `enum` for fields with a fixed set of valid values (e.g., `priority`, `iconMode`, `cooldownEdge`)
+- Use `enum` for fields with a fixed set of valid values (e.g., `priority`, `iconMode`)
 - Use `pattern` for fields with specific formats where appropriate
 - Mark `topic` as required
 - Include `additionalProperties: false` at the top level to catch typos
@@ -230,24 +226,6 @@ The icon resolution logic is:
 3. If the mode is `"dark"` and `iconDark` is set, use that URL.
 4. Otherwise, use the default `raw.githubusercontent.com` PNG URL for the corresponding mode.
 
-### Notification Cooldown
-
-The plugin supports configurable rate limiting to prevent notification spam when the agent rapidly cycles through states.
-
-- `cooldown` accepts an ISO 8601 duration string (e.g., `"PT30S"` for 30 seconds, `"PT5M"` for 5 minutes). The duration is parsed by `src/cooldown.ts` using a small third-party ISO 8601 duration parsing library, which supports hours (`H`), minutes (`M`), seconds (`S`), and fractional seconds.
-- `cooldownEdge` controls the throttling strategy:
-  - `"leading"` (default): The first notification fires immediately. Subsequent notifications for the same event type are suppressed until the cooldown period elapses.
-  - `"trailing"`: Notifications are suppressed until the cooldown period elapses since the last event of that type. Each new event resets the cooldown timer.
-- Cooldown is tracked per event type (e.g., `session.idle` and `session.error` have independent cooldown timers).
-- When `cooldown` is not set, no rate limiting is applied.
-- A cooldown of `"PT0S"` (zero seconds) disables rate limiting.
-
-The cooldown guard is implemented in `src/cooldown.ts` and exposes:
-
-- `parseISO8601Duration(duration: string): number` -- parses an ISO 8601 duration string using a third-party library and returns milliseconds
-- `createCooldownGuard(options: CooldownOptions): CooldownGuard` -- creates a stateful guard that tracks per-event-type cooldowns using a third-party debounce/throttle library for leading/trailing edge behavior
-- `CooldownGuard.shouldAllow(eventType: string): boolean` -- returns whether a notification should be sent
-
 ### Publishing via ntfy.sh
 
 Notifications are sent via HTTP POST:
@@ -281,7 +259,6 @@ The plugin must support all currently supported versions of Node.js (i.e., versi
 - Vitest for testing
 - Small third-party runtime dependencies are allowed and preferred for well-scoped problems. In particular:
   - Use a small library for parsing ISO 8601 duration strings (e.g., `iso8601-duration` or similar) instead of hand-rolling a parser in `parseISO8601Duration()`.
-  - Use a small library for debouncing/throttling (e.g., `throttle-debounce`, `just-debounce-it`, `just-throttle`, or similar) instead of implementing leading/trailing cooldown logic manually.
 - Beyond the above, avoid unnecessary runtime dependencies. Node.js built-in `fetch` is used for HTTP requests.
 - Publishable as an npm package
 
@@ -297,13 +274,11 @@ opencode-ntfy.sh/
     notify.ts         # ntfy.sh HTTP client
     config.ts         # Configuration from JSON config file
     exec.ts           # Command execution and template variable substitution
-    cooldown.ts       # ISO 8601 duration parsing and cooldown guard
   tests/
     notify.test.ts    # Tests for the notification client
     config.test.ts    # Tests for configuration loading
     plugin.test.ts    # Tests for the plugin hooks
     exec.test.ts      # Tests for command execution
-    cooldown.test.ts  # Tests for cooldown guard and duration parsing
     typecheck.test.ts # Compile-time type conformance tests
     mock-shell.ts     # Shared mock BunShell factory
     msw-helpers.ts    # MSW test helpers for capturing HTTP requests

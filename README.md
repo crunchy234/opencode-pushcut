@@ -73,8 +73,6 @@ validation by adding a `$schema` property:
 | `iconMode` | `string` | No | `dark` | Icon variant to use: `light` or `dark`. Reflects whether the target device uses light or dark mode. |
 | `iconLight` | `string` | No | -- | Custom icon URL override for light mode. Must be JPEG or PNG. |
 | `iconDark` | `string` | No | -- | Custom icon URL override for dark mode. Must be JPEG or PNG. |
-| `cooldown` | `string` | No | -- | ISO 8601 duration for notification cooldown (e.g., `PT30S`, `PT5M`). Suppresses duplicate notifications per event type within the cooldown period. |
-| `cooldownEdge` | `string` | No | `leading` | Cooldown edge: `leading` sends immediately then suppresses, `trailing` waits for a quiet period before sending. |
 | `fetchTimeout` | `string` | No | -- | ISO 8601 duration for the HTTP request timeout (e.g., `PT10S`, `PT1M`). When set, the fetch call is aborted if the server does not respond in time. |
 | `events` | `object` | No | -- | Per-event custom command overrides (see [Custom Notification Commands](#custom-notification-commands)). |
 
@@ -198,15 +196,6 @@ With authentication and a self-hosted server:
   "server": "https://ntfy.example.com",
   "token": "tk_mytoken",
   "priority": "high"
-}
-```
-
-With rate limiting (suppress duplicate notifications within 30 seconds):
-
-```json
-{
-  "topic": "my-opencode-notifications",
-  "cooldown": "PT30S"
 }
 ```
 

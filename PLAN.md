@@ -163,21 +163,17 @@
 - [x] Fix title/message default table ordering for consistency (idle, error, permission)
 - [x] Update Node.js version prerequisite from v18+ to v20+
 
-## Phase 21: Replace Hand-Rolled Implementations with Third-Party Libraries
+## Phase 21: Replace Hand-Rolled ISO 8601 Duration Parser with Third-Party Library
 
-- [x] Install `iso8601-duration` and `throttle-debounce` as runtime dependencies (with `@types/throttle-debounce` as dev dependency)
-- [x] Rewrite `parseISO8601Duration` in `src/cooldown.ts` to delegate to `iso8601-duration` (parse + toSeconds) instead of hand-rolled regex
-- [x] Rewrite `createCooldownGuard` in `src/cooldown.ts` to use `throttle` (leading edge) and `debounce` (trailing edge) from `throttle-debounce` instead of hand-rolled Map-based logic
-- [x] Preserve the same public API (`parseISO8601Duration`, `createCooldownGuard`, `CooldownGuard.shouldAllow`) and error message format
-- [x] Ensure all 88 tests pass, lint is clean, and package builds cleanly
+- [x] Install `iso8601-duration` as a runtime dependency
+- [x] Rewrite `parseISO8601Duration` to delegate to `iso8601-duration` (parse + toSeconds) instead of hand-rolled regex
+- [x] Ensure all tests pass, lint is clean, and package builds cleanly
 
 ## Phase 22: Code Simplification Refactoring
 
-- [x] Simplify `parseCooldownEdge` in `src/config.ts` — replace `for...of` loop over `VALID_COOLDOWN_EDGES` array with direct equality checks (`value === "leading" || value === "trailing"`), removing the `VALID_COOLDOWN_EDGES` constant
-- [x] Simplify `resolveIconUrl` in `src/config.ts` — consolidate two separate `if` branches (one for light, one for dark) into a single dynamic env var lookup using `env[\`OPENCODE_NTFY_ICON_${mode.toUpperCase()}\`]`
+- [x] Simplify `resolveIconUrl` in `src/config.ts`
 - [x] Simplify `buildVars` in `src/index.ts` — replace manual `Partial<Record<...>>` destructuring with `?? ""` defaults with a spread-based approach using `Record<string, string>`
-- [x] Simplify cooldown guard creation in `src/index.ts` — replace `let` + `if` block with `const` + ternary, removing unused `CooldownGuard` type import
-- [x] Ensure all 88 tests pass, lint is clean, and package builds cleanly
+- [x] Ensure all tests pass, lint is clean, and package builds cleanly
 
 ## Phase 23: Migrate Config from Environment Variables to JSON Config File
 
@@ -185,10 +181,9 @@
   - `loadConfig()` takes no arguments; uses `os.homedir()` and `path.join()` to locate the file
   - Returns `NtfyConfig | undefined`: `undefined` when file doesn't exist (plugin disabled), `NtfyConfig` when valid
   - Throws an error if the file exists but contains invalid JSON or fails validation
-  - Validates required `topic` field, valid enum values for `priority`/`iconMode`/`cooldownEdge`, valid ISO 8601 durations
-  - Applies defaults for omitted optional fields (`server`, `priority`, `iconMode`, `cooldownEdge`)
+  - Validates required `topic` field, valid enum values for `priority`/`iconMode`, valid ISO 8601 durations
+  - Applies defaults for omitted optional fields (`server`, `priority`, `iconMode`)
   - Resolves `iconUrl` from `iconMode`, `iconLight`, `iconDark` config properties
-  - Parses `cooldown` (validates ISO 8601 duration string, stores as string)
   - Parses `fetchTimeout` ISO 8601 duration into milliseconds
   - Supports `events` object with per-event custom command overrides (`titleCmd`, `messageCmd`, `tagsCmd`, `priorityCmd`)
 - [x] Rewrite `tests/config.test.ts` to test JSON-file-based config loading (mock `readFileSync` and `existsSync`)
@@ -222,3 +217,17 @@
 - [x] Extract `createMockClient` test helper to reduce test duplication
 - [x] Update PLAN.md and README.md
 - [x] Ensure all 100 tests pass, lint is clean, and package builds cleanly
+
+## Phase 26: Remove Cooldown Feature (Not in Spec)
+
+- [x] Delete `src/cooldown.ts` and `tests/cooldown.test.ts`
+- [x] Inline `parseISO8601Duration` into `src/config.ts` (still needed for `fetchTimeout`)
+- [x] Remove `cooldown` and `cooldownEdge` from `NtfyConfig` interface and `loadConfig()`
+- [x] Remove cooldown import and usage from `src/index.ts`
+- [x] Remove `cooldown` and `cooldownEdge` from `opencode-ntfy.schema.json`
+- [x] Remove cooldown tests from `tests/config.test.ts` and `tests/plugin.test.ts`
+- [x] Update schema property test to not expect `cooldown`/`cooldownEdge`
+- [x] Remove `throttle-debounce` (and `@types/throttle-debounce`) dependencies
+- [x] Remove cooldown documentation from `README.md`
+- [x] Update `PLAN.md` to match spec (remove stale cooldown references from earlier phases)
+- [x] Ensure all tests pass, lint is clean, and package builds cleanly

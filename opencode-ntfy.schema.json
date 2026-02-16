@@ -45,17 +45,6 @@
       "type": "string",
       "description": "Custom icon URL override for dark mode. Must point to a JPEG or PNG image."
     },
-    "cooldown": {
-      "type": "string",
-      "pattern": "^P",
-      "description": "ISO 8601 duration for notification cooldown (e.g., 'PT30S', 'PT5M'). When set, duplicate notifications for the same event type are suppressed within the cooldown period."
-    },
-    "cooldownEdge": {
-      "type": "string",
-      "enum": ["leading", "trailing"],
-      "default": "leading",
-      "description": "Which edge of the cooldown window triggers the notification. 'leading' sends immediately and suppresses duplicates. 'trailing' waits for inactivity before sending."
-    },
     "fetchTimeout": {
       "type": "string",
       "pattern": "^P",

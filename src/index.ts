@@ -2,7 +2,6 @@ import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin";
 import { loadConfig, type NtfyConfig, type EventCommands } from "./config.js";
 import { sendNotification } from "./notify.js";
 import { resolveField } from "./exec.js";
-import { createCooldownGuard } from "./cooldown.js";
 
 type BunShell = PluginInput["$"];
 
@@ -80,18 +79,9 @@ export const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
   const $ = input.$;
   const client = input.client;
 
-  const cooldownGuard = config.cooldown
-    ? createCooldownGuard({ cooldown: config.cooldown, edge: config.cooldownEdge })
-    : undefined;
-
   return {
     event: async ({ event }) => {
       const eventType: string = event.type;
-
-      if (cooldownGuard && !cooldownGuard.shouldAllow(eventType)) {
-        return;
-      }
-
       const eventCommands = config.events?.[eventType];
 
       if (event.type === "session.idle") {
