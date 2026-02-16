@@ -88,6 +88,29 @@ function createMockInput(
 }
 
 /**
+ * Creates a mock client whose session.get() returns the given session data.
+ * Useful for testing subagent suppression behavior.
+ */
+function createMockClient(sessionData: { parentID?: string } = {}) {
+  return {
+    session: {
+      get: vi.fn().mockResolvedValue({
+        data: {
+          id: "test-session",
+          projectID: "proj-1",
+          directory: "/home/user/my-project",
+          title: "Test Session",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+          ...sessionData,
+        },
+        error: undefined,
+      }),
+    },
+  };
+}
+
+/**
  * Helper to invoke the event hook with an event object.
  * Uses @ts-expect-error for events not in the current SDK's Event union
  * (e.g., permission.asked) that nonetheless exist at runtime.
@@ -530,22 +553,7 @@ describe("plugin", () => {
       await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
       server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
-      const mockClient = {
-        session: {
-          get: vi.fn().mockResolvedValue({
-            data: {
-              id: "child-session",
-              parentID: "parent-session",
-              projectID: "proj-1",
-              directory: "/home/user/my-project",
-              title: "Child Session",
-              version: "1",
-              time: { created: Date.now(), updated: Date.now() },
-            },
-            error: undefined,
-          }),
-        },
-      };
+      const mockClient = createMockClient({ parentID: "parent-session" });
 
       // @ts-expect-error - mock client for testing
       const hooks = await (await import("../src/index.js")).plugin(createMockInput({ client: mockClient }));
@@ -567,22 +575,7 @@ describe("plugin", () => {
       await mockConfigFile({ topic: "test-topic", server: "https://ntfy.example.com" });
       server.use(captureHandler("https://ntfy.example.com/test-topic"));
 
-      const mockClient = {
-        session: {
-          get: vi.fn().mockResolvedValue({
-            data: {
-              id: "child-session",
-              parentID: "parent-session",
-              projectID: "proj-1",
-              directory: "/home/user/my-project",
-              title: "Child Session",
-              version: "1",
-              time: { created: Date.now(), updated: Date.now() },
-            },
-            error: undefined,
-          }),
-        },
-      };
+      const mockClient = createMockClient({ parentID: "parent-session" });
 
       // @ts-expect-error - mock client for testing
       const hooks = await (await import("../src/index.js")).plugin(createMockInput({ client: mockClient }));
