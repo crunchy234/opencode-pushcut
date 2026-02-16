@@ -1,6 +1,6 @@
 {
   "name": "opencode-ntfy.sh",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "OpenCode plugin that sends push notifications via ntfy.sh",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,6 @@
     "@eslint/js": "^9.0.0",
     "@opencode-ai/plugin": "^1.2.1",
     "@types/node": "^25.2.3",
-
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.0.0",
     "msw": "^2.12.10",
