@@ -181,7 +181,7 @@
 
 ## Phase 23: Migrate Config from Environment Variables to JSON Config File
 
-- [ ] Rewrite `src/config.ts` to read config from `~/.config/opencode/opencode-ntfy.json` instead of environment variables
+- [x] Rewrite `src/config.ts` to read config from `~/.config/opencode/opencode-ntfy.json` instead of environment variables
   - `loadConfig()` takes no arguments; uses `os.homedir()` and `path.join()` to locate the file
   - Returns `NtfyConfig | undefined`: `undefined` when file doesn't exist (plugin disabled), `NtfyConfig` when valid
   - Throws an error if the file exists but contains invalid JSON or fails validation
@@ -191,11 +191,12 @@
   - Parses `cooldown` (validates ISO 8601 duration string, stores as string)
   - Parses `fetchTimeout` ISO 8601 duration into milliseconds
   - Supports `events` object with per-event custom command overrides (`titleCmd`, `messageCmd`, `tagsCmd`, `priorityCmd`)
-- [ ] Rewrite `tests/config.test.ts` to test JSON-file-based config loading (mock `readFileSync` and `existsSync`)
-- [ ] Rewrite `src/index.ts` to use JSON-file-based config
+- [x] Rewrite `tests/config.test.ts` to test JSON-file-based config loading (mock `readFileSync` and `existsSync`)
+- [x] Rewrite `src/index.ts` to use JSON-file-based config
   - Read custom commands from `config.events[eventType]` instead of env vars
   - Use `loadConfig()` with no arguments; return empty hooks when it returns `undefined`
-- [ ] Rewrite `tests/plugin.test.ts` to mock JSON config file instead of env vars
-- [ ] Create `opencode-ntfy.schema.json` — JSON Schema (draft 2020-12) for the config file
-- [ ] Add `opencode-ntfy.schema.json` to `package.json` `files` list
-- [ ] Ensure all tests pass, lint is clean, and package builds cleanly
+- [x] Rewrite `tests/plugin.test.ts` to mock JSON config file instead of env vars
+- [x] Create `opencode-ntfy.schema.json` — JSON Schema (draft 2020-12) for the config file
+- [x] Add `opencode-ntfy.schema.json` to `package.json` `files` list
+- [x] Add tests for JSON Schema (existence, property coverage, package.json inclusion)
+- [x] Ensure all 95 tests pass, lint is clean, and package builds cleanly
