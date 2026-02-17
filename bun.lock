@@ -6,7 +6,7 @@
       "name": "opencode-ntfy.sh",
       "dependencies": {
         "iso8601-duration": "^2.1.3",
-        "opencode-notification-sdk": "0.0.3",
+        "opencode-notification-sdk": "1",
       },
       "devDependencies": {
         "@eslint/js": "^9.0.0",
@@ -406,7 +406,7 @@
 
     "obug": ["obug@2.1.1", "", {}, "sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ=="],
 
-    "opencode-notification-sdk": ["opencode-notification-sdk@0.0.3", "", { "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-/8lhPiag9cXoAt+4Vao71mScmiv5lUZdUJz7whItzO46xTjwGz4DjmY1/pS5e0Rn+YeDZuqAwhjM4kJNir2CsA=="],
+    "opencode-notification-sdk": ["opencode-notification-sdk@1.0.3", "", { "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-hLCAqqQvQUexmcbMVleK2HhX/sR3POiSsqQuXOd31u4Ny5uMGUH3i3p93e3KtulpUkTvIq5lmuuVFZLL4n8kNg=="],
 
     "optionator": ["optionator@0.9.4", "", { "dependencies": { "deep-is": "^0.1.3", "fast-levenshtein": "^2.0.6", "levn": "^0.4.1", "prelude-ls": "^1.2.1", "type-check": "^0.4.0", "word-wrap": "^1.2.5" } }, "sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g=="],
 
