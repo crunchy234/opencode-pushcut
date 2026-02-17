@@ -220,7 +220,7 @@ The `parseNtfyBackendConfig()` function in `src/config.ts` must:
 
 #### JSON Schema
 
-The JSON Schema file (`opencode-ntfy.schema.json`) must:
+The JSON Schema file (`notification-ntfy.schema.json`) must:
 
 - Be a valid JSON Schema (draft 2020-12 or later)
 - Define the full configuration structure including SDK-level properties (`enabled`, `events`) and the `backend` object with all ntfy-specific properties
@@ -336,7 +336,7 @@ opencode-ntfy.sh/
     config.test.ts    # Tests for ntfy-specific backend config parsing and validation
     typecheck.test.ts # Compile-time type conformance tests
     msw-helpers.ts    # MSW test helpers for capturing HTTP requests
-  opencode-ntfy.schema.json  # JSON Schema for the config file (published with npm package)
+  notification-ntfy.schema.json  # JSON Schema for the config file (published with npm package)
   eslint.config.js      # ESLint configuration
   package.json
   tsconfig.json

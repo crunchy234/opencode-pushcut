@@ -325,3 +325,8 @@ Migrate the plugin to use `opencode-notification-sdk` as a runtime dependency. T
 - [x] Write schema tests for title/message property definitions
 - [x] Update `README.md` with notification content template documentation
 - [x] Ensure all 68 tests pass, lint is clean, and package builds cleanly
+
+## Phase 33: Fix Schema Filename References
+
+- [x] Update tests, `package.json` `files` list, `README.md`, and schema `$id` to reference `notification-ntfy.schema.json` (matching actual file name and spec) instead of `opencode-ntfy.schema.json`
+- [x] Ensure all 68 tests pass, lint is clean, and package builds cleanly

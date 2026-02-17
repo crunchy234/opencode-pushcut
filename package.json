@@ -32,7 +32,7 @@
   },
   "files": [
     "dist",
-    "opencode-ntfy.schema.json"
+    "notification-ntfy.schema.json"
   ],
   "repository": {
     "type": "git",

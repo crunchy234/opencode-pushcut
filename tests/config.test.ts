@@ -285,11 +285,11 @@ describe("parseNtfyBackendConfig", () => {
 });
 
 describe("JSON Schema", () => {
-  it("should have a valid JSON Schema file at opencode-ntfy.schema.json", () => {
+  it("should have a valid JSON Schema file at notification-ntfy.schema.json", () => {
     const schemaPath = join(
       import.meta.dirname,
       "..",
-      "opencode-ntfy.schema.json"
+      "notification-ntfy.schema.json"
     );
     expect(existsSync(schemaPath)).toBe(true);
     const schema = JSON.parse(readFileSync(schemaPath, "utf-8"));
@@ -302,7 +302,7 @@ describe("JSON Schema", () => {
     const schemaPath = join(
       import.meta.dirname,
       "..",
-      "opencode-ntfy.schema.json"
+      "notification-ntfy.schema.json"
     );
     const schema = JSON.parse(readFileSync(schemaPath, "utf-8"));
     const properties = Object.keys(schema.properties);
@@ -327,7 +327,7 @@ describe("JSON Schema", () => {
     const schemaPath = join(
       import.meta.dirname,
       "..",
-      "opencode-ntfy.schema.json"
+      "notification-ntfy.schema.json"
     );
     const schema = JSON.parse(readFileSync(schemaPath, "utf-8"));
     const titleSchema = schema.properties.backend.properties.title;
@@ -362,7 +362,7 @@ describe("JSON Schema", () => {
     const schemaPath = join(
       import.meta.dirname,
       "..",
-      "opencode-ntfy.schema.json"
+      "notification-ntfy.schema.json"
     );
     const schema = JSON.parse(readFileSync(schemaPath, "utf-8"));
     expect(schema.properties.backend.required).toContain("topic");
@@ -371,6 +371,6 @@ describe("JSON Schema", () => {
   it("should be listed in package.json files array", () => {
     const pkgPath = join(import.meta.dirname, "..", "package.json");
     const pkgContent = JSON.parse(readFileSync(pkgPath, "utf-8"));
-    expect(pkgContent.files).toContain("opencode-ntfy.schema.json");
+    expect(pkgContent.files).toContain("notification-ntfy.schema.json");
   });
 });

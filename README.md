@@ -71,7 +71,7 @@ validation by adding a `$schema` property:
 
 ```json
 {
-  "$schema": "node_modules/opencode-ntfy.sh/opencode-ntfy.schema.json",
+  "$schema": "node_modules/opencode-ntfy.sh/notification-ntfy.schema.json",
   "backend": {
     "topic": "my-notifications"
   }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/main/opencode-ntfy.schema.json",
+  "$id": "https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/main/notification-ntfy.schema.json",
   "title": "opencode-ntfy.sh Configuration",
   "description": "Configuration file for the opencode-ntfy.sh plugin, which sends push notifications via ntfy.sh during OpenCode sessions. Located at ~/.config/opencode/notification-ntfy.json.",
   "type": "object",
