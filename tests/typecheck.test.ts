@@ -57,12 +57,13 @@ void _check;
     }
   });
 
-  it("should type-check that createNtfyBackend returns NotificationBackend", { timeout: 30000 }, () => {
+  it("should type-check that createNtfyBackend returns NotificationBackend with optional $", { timeout: 30000 }, () => {
     const checkFile = join(ROOT, "src", "_typecheck_backend.ts");
 
     writeFileSync(
       checkFile,
       `
+import type { PluginInput } from "@opencode-ai/plugin";
 import type { NotificationBackend } from "opencode-notification-sdk";
 import { createNtfyBackend } from "./backend.js";
 import type { NtfyBackendConfig } from "./config.js";
@@ -74,9 +75,14 @@ const config: NtfyBackendConfig = {
   iconUrl: "https://example.com/icon.png",
 };
 
-// createNtfyBackend should return a NotificationBackend
-const _check: NotificationBackend = createNtfyBackend(config);
-void _check;
+// createNtfyBackend should return a NotificationBackend without $
+const _check1: NotificationBackend = createNtfyBackend(config);
+void _check1;
+
+// createNtfyBackend should also accept $ as second argument
+declare const shell: PluginInput["$"];
+const _check2: NotificationBackend = createNtfyBackend(config, shell);
+void _check2;
 `
     );
 
