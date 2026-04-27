@@ -1,7 +1,7 @@
 {
-  "name": "opencode-ntfy.sh",
+  "name": "opencode-pushcut",
   "version": "1.1.0",
-  "description": "OpenCode plugin that sends push notifications via ntfy.sh",
+  "description": "OpenCode plugin that sends push notifications via Pushcut",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,8 +45,7 @@
   "keywords": [
     "opencode",
     "opencode-plugin",
-    "ntfy",
-    "ntfy.sh",
+    "pushcut",
     "notifications",
     "push-notifications",
     "ai",
