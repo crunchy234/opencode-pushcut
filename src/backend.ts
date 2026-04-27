@@ -11,7 +11,7 @@ import type {
   ContentTemplateMap,
 } from "./config.js";
 
-const PUSHCUT_API_BASE = "https://api.pushcut.io/v1";
+export const PUSHCUT_API_BASE = "https://api.pushcut.io/v1";
 
 const DEFAULT_TITLES: Record<NotificationEvent, string> = {
   "session.idle": "Agent Idle",

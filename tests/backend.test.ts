@@ -1,97 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { http, HttpResponse, delay } from "msw";
-import { execSync } from "node:child_process";
 import type { NotificationContext } from "opencode-notification-sdk";
-import type { PluginInput } from "@opencode-ai/plugin";
-import { createPushcutBackend } from "../src/backend.js";
+import { createPushcutBackend, PUSHCUT_API_BASE } from "../src/backend.js";
 import type { PushcutBackendConfig } from "../src/config.js";
 import {
   server,
   captureHandler,
   getCapturedRequest,
   resetCapturedRequest,
+  createTestShell,
 } from "./msw-helpers.js";
-
-function createTestShell(): PluginInput["$"] {
-  function getExitCode(err: unknown): number {
-    if (err !== null && typeof err === "object" && "status" in err && typeof err.status === "number") {
-      return err.status;
-    }
-    return 1;
-  }
-
-  function shellFn(
-    strings: TemplateStringsArray,
-    ...expressions: Array<{ raw?: string; toString(): string }>
-  ): ReturnType<PluginInput["$"]> {
-    let command = "";
-    for (let i = 0; i < strings.length; i++) {
-      command += strings[i];
-      if (i < expressions.length) {
-        const expr = expressions[i];
-        if (typeof expr === "object" && expr !== null && "raw" in expr && typeof expr.raw === "string") {
-          command += expr.raw;
-        } else {
-          command += String(expr);
-        }
-      }
-    }
-    command = command.trim();
-
-    let stdout = "";
-    let exitCode = 0;
-    try {
-      stdout = execSync(command, { encoding: "utf-8" });
-    } catch (err: unknown) {
-      exitCode = getExitCode(err);
-    }
-
-    const output = {
-      stdout: Buffer.from(stdout),
-      stderr: Buffer.from(""),
-      exitCode,
-      text: () => stdout,
-      json: () => JSON.parse(stdout),
-      arrayBuffer: () => Buffer.from(stdout).buffer,
-      bytes: () => new Uint8Array(Buffer.from(stdout)),
-      blob: () => new Blob([stdout]),
-    };
-
-    const resolved = Promise.resolve(output);
-
-    const chainable: ReturnType<PluginInput["$"]> = {
-      then: resolved.then.bind(resolved),
-      catch: resolved.catch.bind(resolved),
-      finally: resolved.finally.bind(resolved),
-      [Symbol.toStringTag]: "Promise",
-      stdin: new WritableStream(),
-      cwd: () => chainable,
-      env: () => chainable,
-      quiet: () => chainable,
-      lines: async function* () { yield stdout; },
-      text: () => Promise.resolve(stdout),
-      json: () => Promise.resolve(JSON.parse(stdout)),
-      arrayBuffer: () => Promise.resolve(Buffer.from(stdout).buffer),
-      blob: () => Promise.resolve(new Blob([stdout])),
-      nothrow: () => chainable,
-      throws: () => chainable,
-    };
-
-    return chainable;
-  }
-
-  shellFn.braces = (pattern: string) => [pattern];
-  shellFn.escape = (input: string) => input;
-  shellFn.env = (): PluginInput["$"] => testShell;
-  shellFn.cwd = (): PluginInput["$"] => testShell;
-  shellFn.nothrow = (): PluginInput["$"] => testShell;
-  shellFn.throws = (): PluginInput["$"] => testShell;
-
-  const testShell: PluginInput["$"] = shellFn;
-  return testShell;
-}
-
-const PUSHCUT_API_BASE = "https://api.pushcut.io/v1";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
@@ -356,6 +274,17 @@ describe("createPushcutBackend", () => {
       expect(captured).not.toBeNull();
       const body = JSON.parse(captured!.body);
       expect(body.text).toBe("Error: something broke in my-project");
+    });
+
+    it("should throw when a command template is configured but no shell is provided", async () => {
+      server.use(captureHandler(`${PUSHCUT_API_BASE}/notifications/MyNotification`));
+      const backend = createPushcutBackend(
+        makeConfig({ title: { "session.idle": { command: "echo hello" } } })
+        // no $ passed
+      );
+      await expect(backend.send(makeContext({ event: "session.idle" }))).rejects.toThrow(
+        "no shell"
+      );
     });
   });
 });
