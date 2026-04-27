@@ -71,17 +71,29 @@ export function parsePushcutBackendConfig(
     devices = raw.devices as string[];
   }
 
-  const fetchTimeout =
-    typeof raw.fetchTimeout === "string"
-      ? parseISO8601Duration(raw.fetchTimeout)
-      : undefined;
+  let fetchTimeout: number | undefined;
+  if (raw.fetchTimeout !== undefined) {
+    if (typeof raw.fetchTimeout !== "string") {
+      throw new Error("Backend config 'fetchTimeout' must be an ISO 8601 duration string");
+    }
+    fetchTimeout = parseISO8601Duration(raw.fetchTimeout);
+  }
 
-  const title = isRecord(raw.title)
-    ? parseContentTemplateMap(raw.title, "title")
-    : undefined;
-  const message = isRecord(raw.message)
-    ? parseContentTemplateMap(raw.message, "message")
-    : undefined;
+  let title: ContentTemplateMap | undefined;
+  if (raw.title !== undefined) {
+    if (!isRecord(raw.title)) {
+      throw new Error("Backend config 'title' must be an object");
+    }
+    title = parseContentTemplateMap(raw.title, "title");
+  }
+
+  let message: ContentTemplateMap | undefined;
+  if (raw.message !== undefined) {
+    if (!isRecord(raw.message)) {
+      throw new Error("Backend config 'message' must be an object");
+    }
+    message = parseContentTemplateMap(raw.message, "message");
+  }
 
   return { notificationName, apiKey, devices, fetchTimeout, title, message };
 }
@@ -113,10 +125,10 @@ function parseContentTemplateMap(
     if (!hasValue && !hasCommand) {
       throw new Error(`backend.${fieldName}.${key} must contain exactly one of 'value' or 'command'`);
     }
-    if (hasValue && typeof entry.value === "string") {
-      result[key] = { value: entry.value };
-    } else if (hasCommand && typeof entry.command === "string") {
-      result[key] = { command: entry.command };
+    if (hasValue) {
+      result[key] = { value: entry.value as string };
+    } else if (hasCommand) {
+      result[key] = { command: entry.command as string };
     }
   }
   return result;
