@@ -32,7 +32,7 @@
   },
   "files": [
     "dist",
-    "notification-ntfy.schema.json"
+    "notification-pushcut.schema.json"
   ],
   "repository": {
     "type": "git",

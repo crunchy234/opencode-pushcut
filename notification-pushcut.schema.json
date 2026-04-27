@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/lannuttia/opencode-ntfy.sh/main/notification-pushcut.schema.json",
+  "title": "opencode-pushcut Configuration",
+  "description": "Configuration file for the opencode-pushcut plugin, which sends push notifications via Pushcut during OpenCode sessions. Located at ~/.config/opencode/notification-pushcut.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path or URL to the JSON Schema for editor validation and autocompletion."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Global kill switch for all notifications."
+    },
+    "events": {
+      "type": "object",
+      "description": "Per-event enable/disable toggles.",
+      "additionalProperties": false,
+      "properties": {
+        "session.idle": { "$ref": "#/$defs/eventToggle" },
+        "session.error": { "$ref": "#/$defs/eventToggle" },
+        "permission.asked": { "$ref": "#/$defs/eventToggle" }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "description": "Pushcut-specific backend configuration.",
+      "required": ["notificationName", "apiKey"],
+      "additionalProperties": false,
+      "properties": {
+        "notificationName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The name of the Pushcut notification definition to trigger."
+        },
+        "apiKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pushcut API key. Obtain from the Account view in the Pushcut app."
+        },
+        "devices": {
+          "type": "array",
+          "description": "Optional list of device names to target. If omitted, all devices receive the notification.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fetchTimeout": {
+          "type": "string",
+          "pattern": "^P",
+          "description": "ISO 8601 duration for the HTTP request timeout (e.g., 'PT10S' for 10 seconds)."
+        },
+        "title": {
+          "type": "object",
+          "description": "Title override per event type.",
+          "additionalProperties": false,
+          "properties": {
+            "session.idle": { "$ref": "#/$defs/contentTemplate" },
+            "session.error": { "$ref": "#/$defs/contentTemplate" },
+            "permission.asked": { "$ref": "#/$defs/contentTemplate" }
+          }
+        },
+        "message": {
+          "type": "object",
+          "description": "Message body override per event type.",
+          "additionalProperties": false,
+          "properties": {
+            "session.idle": { "$ref": "#/$defs/contentTemplate" },
+            "session.error": { "$ref": "#/$defs/contentTemplate" },
+            "permission.asked": { "$ref": "#/$defs/contentTemplate" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "eventToggle": {
+      "type": "object",
+      "description": "Per-event enable/disable toggle.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this event type triggers notifications."
+        }
+      }
+    },
+    "contentTemplate": {
+      "type": "object",
+      "description": "Content template. Must contain exactly one of 'value' or 'command'.",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "string",
+              "description": "A template string with {var_name} placeholders."
+            }
+          }
+        },
+        {
+          "required": ["command"],
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "A shell command template. Trimmed stdout is used as the value."
+            }
+          }
+        }
+      ]
+    }
+  }
+}
